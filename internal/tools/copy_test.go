@@ -20,7 +20,7 @@ func TestHandleCopyFile(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    map[string]any
-		setup   func()
+		setup   func(t *testing.T)
 		isError bool
 	}{
 		{
@@ -37,8 +37,10 @@ func TestHandleCopyFile(t *testing.T) {
 				"source":      srcFile,
 				"destination": filepath.Join(tmpDir, "existing.txt"),
 			},
-			setup: func() {
-				os.WriteFile(filepath.Join(tmpDir, "existing.txt"), []byte("existing"), 0644)
+			setup: func(t *testing.T) {
+				if err := os.WriteFile(filepath.Join(tmpDir, "existing.txt"), []byte("existing"), 0644); err != nil {
+					t.Fatalf("failed to write existing file: %v", err)
+				}
 			},
 			isError: true,
 		},
@@ -49,8 +51,10 @@ func TestHandleCopyFile(t *testing.T) {
 				"destination": filepath.Join(tmpDir, "overwrite.txt"),
 				"overwrite":   true,
 			},
-			setup: func() {
-				os.WriteFile(filepath.Join(tmpDir, "overwrite.txt"), []byte("old"), 0644)
+			setup: func(t *testing.T) {
+				if err := os.WriteFile(filepath.Join(tmpDir, "overwrite.txt"), []byte("old"), 0644); err != nil {
+					t.Fatalf("failed to write overwrite file: %v", err)
+				}
 			},
 			isError: false,
 		},
@@ -70,12 +74,29 @@ func TestHandleCopyFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name: "destination symlink fails",
+			args: map[string]any{
+				"source":      srcFile,
+				"destination": filepath.Join(tmpDir, "symlinked.txt"),
+			},
+			setup: func(t *testing.T) {
+				target := filepath.Join(tmpDir, "target.txt")
+				if err := os.WriteFile(target, []byte("target"), 0644); err != nil {
+					t.Fatalf("failed to write target: %v", err)
+				}
+				if err := os.Symlink(target, filepath.Join(tmpDir, "symlinked.txt")); err != nil {
+					t.Skip("cannot create symlink")
+				}
+			},
+			isError: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setup != nil {
-				tt.setup()
+				tt.setup(t)
 			}
 
 			request := mcp.CallToolRequest{}

@@ -17,6 +17,7 @@ func TestHandleWriteFile(t *testing.T) {
 		args     map[string]any
 		isError  bool
 		validate func(t *testing.T)
+		setup    func(t *testing.T)
 	}{
 		{
 			name: "write new file",
@@ -77,6 +78,22 @@ func TestHandleWriteFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name: "write fails when destination is symlink",
+			args: map[string]any{
+				"path":    filepath.Join(tmpDir, "link.txt"),
+				"content": "test",
+			},
+			isError: true,
+			setup: func(t *testing.T) {
+				target := filepath.Join(tmpDir, "target.txt")
+				os.WriteFile(target, []byte("test"), 0644)
+				link := filepath.Join(tmpDir, "link.txt")
+				if err := os.Symlink(target, link); err != nil {
+					t.Skip("cannot create symlink")
+				}
+			},
+		},
 	}
 
 	// Create existing file for overwrite test
@@ -86,6 +103,9 @@ func TestHandleWriteFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(t)
+			}
 			request := mcp.CallToolRequest{}
 			request.Params.Arguments = tt.args
 
@@ -114,7 +134,7 @@ func TestAtomicWriteFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "atomic.txt")
 
-	if err := atomicWriteFile(testFile, []byte("test"), 0644); err != nil {
+	if err := atomicWriteFile(testFile, []byte("test"), 0644, []string{tmpDir}); err != nil {
 		t.Fatalf("atomicWriteFile error: %v", err)
 	}
 

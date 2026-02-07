@@ -10,6 +10,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
+	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/spf13/cast"
 )
 
@@ -42,7 +43,7 @@ func HandleWriteFile(ctx context.Context, reg *registry.Registry, request mcp.Ca
 	}
 
 	// Atomic write using temp file
-	if err := atomicWriteFile(resolvedPath, []byte(content), 0644); err != nil {
+	if err := atomicWriteFile(resolvedPath, []byte(content), 0644, reg.Get()); err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to write file: %w", err).Error()), nil
 	}
 
@@ -50,7 +51,12 @@ func HandleWriteFile(ctx context.Context, reg *registry.Registry, request mcp.Ca
 }
 
 // atomicWriteFile writes data to a file atomically using a temp file and rename.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+func atomicWriteFile(path string, data []byte, perm os.FileMode, allowedDirs []string) error {
+	// Validate destination path before any I/O
+	if _, err := security.ValidateFinalPathForCreation(path, allowedDirs); err != nil {
+		return fmt.Errorf("path validation failed: %w", err)
+	}
+
 	dir := filepath.Dir(path)
 
 	// Generate random suffix for temp file

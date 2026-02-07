@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -31,17 +32,16 @@ func NewDeleteFileTool(reg *registry.Registry) mcp.Tool {
 func HandleDeleteFile(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path := cast.ToString(request.Params.Arguments["path"])
 
-	resolvedPath, err := reg.Validate(path)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
-	}
-
-	// Check if path exists and is a file
-	info, err := os.Stat(resolvedPath)
+	resolvedPath, err := security.ValidateFinalPath(path, reg.Get())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return mcp.NewToolResultError("file does not exist"), nil
 		}
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
+	}
+
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 
@@ -77,17 +77,16 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 	path := cast.ToString(request.Params.Arguments["path"])
 	recursive := cast.ToBool(request.Params.Arguments["recursive"])
 
-	resolvedPath, err := reg.Validate(path)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
-	}
-
-	// Check if path exists and is a directory
-	info, err := os.Stat(resolvedPath)
+	resolvedPath, err := security.ValidateFinalPath(path, reg.Get())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return mcp.NewToolResultError("directory does not exist"), nil
 		}
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
+	}
+
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 
@@ -96,7 +95,6 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 	}
 
 	// Prevent deleting an allowed root directory
-	// Resolve allowed dirs to handle symlinks (e.g., /var -> /private/var on macOS)
 	allowedDirs := reg.Get()
 	cleanPath := filepath.Clean(resolvedPath)
 	for _, allowed := range allowedDirs {
@@ -110,6 +108,10 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 	}
 
 	if recursive {
+		if err := rejectSymlinkEntries(resolvedPath); err != nil {
+			return mcp.NewToolResultError(fmt.Errorf("failed to validate directory contents: %w", err).Error()), nil
+		}
+
 		// Extra safety check: ensure we're not recursively deleting anything that
 		// contains an allowed directory
 		for _, allowed := range allowedDirs {
@@ -133,4 +135,16 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted %s", resolvedPath)), nil
+}
+
+func rejectSymlinkEntries(root string) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("cannot delete directory containing symlink: %s", path)
+		}
+		return nil
+	})
 }

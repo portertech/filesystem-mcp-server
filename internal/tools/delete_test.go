@@ -42,6 +42,19 @@ func TestHandleDeleteFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name: "delete symlink fails",
+			setup: func() string {
+				target := filepath.Join(tmpDir, "target.txt")
+				os.WriteFile(target, []byte("test"), 0644)
+				link := filepath.Join(tmpDir, "link.txt")
+				if err := os.Symlink(target, link); err != nil {
+					t.Skip("cannot create symlink")
+				}
+				return link
+			},
+			isError: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,6 +134,22 @@ func TestHandleDeleteDirectory(t *testing.T) {
 				return f
 			},
 			args:    map[string]any{"recursive": false},
+			isError: true,
+		},
+		{
+			name: "delete directory with symlink child fails",
+			setup: func() string {
+				d := filepath.Join(tmpDir, "symlinkdir")
+				os.MkdirAll(d, 0755)
+				target := filepath.Join(tmpDir, "target.txt")
+				os.WriteFile(target, []byte("test"), 0644)
+				link := filepath.Join(d, "link.txt")
+				if err := os.Symlink(target, link); err != nil {
+					t.Skip("cannot create symlink")
+				}
+				return d
+			},
+			args:    map[string]any{"recursive": true},
 			isError: true,
 		},
 	}

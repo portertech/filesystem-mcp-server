@@ -113,7 +113,7 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 		return mcp.NewToolResultError(fmt.Errorf("failed to stat file: %w", err).Error()), nil
 	}
 
-	if err := atomicWriteFile(resolvedPath, []byte(newContent), info.Mode().Perm()); err != nil {
+	if err := atomicWriteFile(resolvedPath, []byte(newContent), info.Mode().Perm(), reg.Get()); err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to write file: %w", err).Error()), nil
 	}
 

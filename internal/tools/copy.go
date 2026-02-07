@@ -7,6 +7,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
+	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/portertech/filesystem-mcp-server/internal/stream"
 	"github.com/spf13/cast"
 )
@@ -52,6 +53,11 @@ func HandleCopyFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	// Validate destination path
 	resolvedDst, err := reg.ValidateForCreation(destination)
 	if err != nil {
+		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
+	}
+
+	// Validate destination for symlink rejection before any I/O
+	if _, err := security.ValidateFinalPathForCreation(destination, reg.Get()); err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
 	}
 

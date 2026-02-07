@@ -11,11 +11,13 @@ import (
 
 // Sentinel errors for path validation.
 var (
-	ErrAccessDenied       = errors.New("access denied")
-	ErrPathOutsideAllowed = errors.New("path is outside allowed directories")
-	ErrSymlinkOutside     = errors.New("symlink target is outside allowed directories")
-	ErrNullByte           = errors.New("path contains null byte")
-	ErrEmptyPath          = errors.New("path is empty")
+	ErrAccessDenied           = errors.New("access denied")
+	ErrPathOutsideAllowed     = errors.New("path is outside allowed directories")
+	ErrSymlinkOutside         = errors.New("symlink target is outside allowed directories")
+	ErrSymlinkOperationDenied = errors.New("operation denied: path is a symlink")
+	ErrNullByte               = errors.New("path contains null byte")
+	ErrEmptyPath              = errors.New("path is empty")
+	ErrNoValidAncestor        = errors.New("no valid ancestor found within allowed directories")
 )
 
 // ValidatePath validates that a path is within allowed directories and safe to access.
@@ -73,6 +75,112 @@ func ValidatePath(path string, allowedDirs []string) (string, error) {
 	resolvedAllowed := resolveAllowedDirs(allowedDirs)
 
 	// Check if resolved path is within allowed directories
+	if !IsPathWithinAllowedDirectories(resolvedPath, resolvedAllowed) {
+		return "", ErrPathOutsideAllowed
+	}
+
+	return resolvedPath, nil
+}
+
+// ValidateFinalPath validates an existing path and rejects symlinks.
+// It returns the resolved absolute path if valid.
+func ValidateFinalPath(path string, allowedDirs []string) (string, error) {
+	if path == "" {
+		return "", ErrEmptyPath
+	}
+
+	if strings.ContainsRune(path, 0) {
+		return "", ErrNullByte
+	}
+
+	normalizedPath, err := pathutil.NormalizePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Lstat(normalizedPath)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", ErrSymlinkOperationDenied
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(normalizedPath)
+	if err != nil {
+		return "", err
+	}
+
+	resolvedAllowed := resolveAllowedDirs(allowedDirs)
+	if !IsPathWithinAllowedDirectories(resolvedPath, resolvedAllowed) {
+		return "", ErrPathOutsideAllowed
+	}
+
+	return resolvedPath, nil
+}
+
+// ValidateFinalPathForCreation validates a path for creation and rejects symlink destinations.
+// It returns the resolved absolute path if valid.
+func ValidateFinalPathForCreation(path string, allowedDirs []string) (string, error) {
+	if path == "" {
+		return "", ErrEmptyPath
+	}
+
+	if strings.ContainsRune(path, 0) {
+		return "", ErrNullByte
+	}
+
+	normalizedPath, err := pathutil.NormalizePath(path)
+	if err != nil {
+		return "", err
+	}
+
+	if info, err := os.Lstat(normalizedPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", ErrSymlinkOperationDenied
+		}
+		resolvedPath, err := filepath.EvalSymlinks(normalizedPath)
+		if err != nil {
+			return "", err
+		}
+
+		resolvedAllowed := resolveAllowedDirs(allowedDirs)
+		if !IsPathWithinAllowedDirectories(resolvedPath, resolvedAllowed) {
+			return "", ErrPathOutsideAllowed
+		}
+
+		return resolvedPath, nil
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+
+	resolvedAllowed := resolveAllowedDirs(allowedDirs)
+
+	parentDir := filepath.Dir(normalizedPath)
+	resolvedPath := normalizedPath
+	foundAncestor := false
+
+	for parentDir != "/" && parentDir != "." {
+		if _, err := os.Stat(parentDir); err == nil {
+			resolvedParent, err := filepath.EvalSymlinks(parentDir)
+			if err != nil {
+				return "", err
+			}
+			relPath, err := filepath.Rel(parentDir, normalizedPath)
+			if err != nil {
+				return "", err
+			}
+			resolvedPath = filepath.Join(resolvedParent, relPath)
+			foundAncestor = true
+			break
+		}
+		parentDir = filepath.Dir(parentDir)
+	}
+
+	if !foundAncestor {
+		return "", ErrNoValidAncestor
+	}
+
 	if !IsPathWithinAllowedDirectories(resolvedPath, resolvedAllowed) {
 		return "", ErrPathOutsideAllowed
 	}
