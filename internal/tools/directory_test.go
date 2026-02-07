@@ -64,6 +64,42 @@ func TestHandleCreateDirectory(t *testing.T) {
 	}
 }
 
+func TestHandleCreateDirectoryRejectsSymlinksInPath(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	// Create a real directory
+	realDir := filepath.Join(tmpDir, "realdir")
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink to the real directory
+	linkDir := filepath.Join(tmpDir, "linkdir")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	// Try to create a directory through the symlink
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{
+		"path": filepath.Join(linkDir, "newsubdir"),
+	}
+
+	result, err := HandleCreateDirectory(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.IsError {
+		t.Error("expected error when creating directory through symlink")
+	}
+
+	// Verify directory was not created through the symlink
+	if _, err := os.Stat(filepath.Join(realDir, "newsubdir")); err == nil {
+		t.Error("directory should not have been created through symlink")
+	}
+}
+
 func TestHandleListDirectory(t *testing.T) {
 	reg, tmpDir := setupTestRegistry(t)
 
@@ -234,5 +270,37 @@ func TestHandleDirectoryTree(t *testing.T) {
 	}
 	if tree.Children[0].Name != "a" {
 		t.Fatalf("expected first child to be 'a', got %q", tree.Children[0].Name)
+	}
+}
+
+func TestHandleDirectoryTreeSkipsSymlinkedDirectories(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	targetDir := t.TempDir()
+	os.WriteFile(filepath.Join(targetDir, "secret.txt"), []byte("secret"), 0644)
+
+	linkPath := filepath.Join(tmpDir, "link")
+	if err := os.Symlink(targetDir, linkPath); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": tmpDir}
+
+	result, err := HandleDirectoryTree(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	if strings.Contains(output, "secret.txt") {
+		t.Error("symlinked directory contents should not be in output")
+	}
+	if strings.Contains(output, "link") {
+		t.Error("symlinked directory should not be in output")
 	}
 }

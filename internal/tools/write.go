@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/portertech/filesystem-mcp-server/internal/pathutil"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
 	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/spf13/cast"
@@ -37,8 +39,8 @@ func HandleWriteFile(ctx context.Context, reg *registry.Registry, request mcp.Ca
 	}
 
 	// Create parent directories if needed
-	dir := filepath.Dir(resolvedPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	dir := filepath.Dir(path)
+	if err := safeMkdirAll(dir, 0755, reg.Get()); err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to create directories: %w", err).Error()), nil
 	}
 
@@ -99,5 +101,135 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode, allowedDirs []s
 	}
 
 	success = true
+	return nil
+}
+
+func safeMkdirAll(path string, perm os.FileMode, allowedDirs []string) error {
+	normalized, err := pathutil.NormalizePath(path)
+	if err != nil {
+		return err
+	}
+	if _, err := security.ValidatePathForCreation(normalized, allowedDirs); err != nil {
+		return err
+	}
+
+	allowedRoot := ""
+	for _, dir := range allowedDirs {
+		normalizedDir, err := pathutil.NormalizePath(dir)
+		if err != nil {
+			continue
+		}
+		if normalized == normalizedDir || strings.HasPrefix(normalized, normalizedDir+string(filepath.Separator)) {
+			if len(normalizedDir) > len(allowedRoot) {
+				allowedRoot = normalizedDir
+			}
+		}
+	}
+	if allowedRoot == "" {
+		return security.ErrPathOutsideAllowed
+	}
+
+	relative, err := filepath.Rel(allowedRoot, normalized)
+	if err != nil {
+		return err
+	}
+	if relative == "." {
+		return nil
+	}
+
+	current := allowedRoot
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+
+		info, err := os.Lstat(current)
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return security.ErrSymlinkOperationDenied
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("path segment is not a directory: %s", current)
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+
+		if _, err := security.ValidatePathForCreation(current, allowedDirs); err != nil {
+			return err
+		}
+		if err := os.Mkdir(current, perm); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateNoSymlinkPath(path string, allowedDirs []string) error {
+	normalized, err := pathutil.NormalizePath(path)
+	if err != nil {
+		return err
+	}
+
+	allowedRoot := ""
+	for _, dir := range allowedDirs {
+		normalizedDir, err := pathutil.NormalizePath(dir)
+		if err != nil {
+			continue
+		}
+		if normalized == normalizedDir || strings.HasPrefix(normalized, normalizedDir+string(filepath.Separator)) {
+			if len(normalizedDir) > len(allowedRoot) {
+				allowedRoot = normalizedDir
+			}
+		}
+	}
+	if allowedRoot == "" {
+		return security.ErrPathOutsideAllowed
+	}
+
+	relative, err := filepath.Rel(allowedRoot, normalized)
+	if err != nil {
+		return err
+	}
+	if relative == "." {
+		return nil
+	}
+
+	current := allowedRoot
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return security.ErrSymlinkOperationDenied
+		}
+	}
+
+	return nil
+}
+
+func ensureNoSymlink(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return security.ErrSymlinkOperationDenied
+	}
 	return nil
 }

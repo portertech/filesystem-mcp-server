@@ -39,7 +39,8 @@ func HandleCreateDirectory(ctx context.Context, reg *registry.Registry, request 
 		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
-	if err := os.MkdirAll(resolvedPath, 0755); err != nil {
+	// Use safeMkdirAll to prevent creating directories through symlinks
+	if err := safeMkdirAll(path, 0755, reg.Get()); err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("failed to create directory: %w", err).Error()), nil
 	}
 
@@ -343,6 +344,7 @@ func HandleDirectoryTree(ctx context.Context, reg *registry.Registry, request mc
 }
 
 // buildTree recursively builds a directory tree.
+// Symlinks are skipped during recursion but allowed at the root (already validated by caller).
 func buildTree(path string, excludeGlobs []glob.Glob) (*filesystem.TreeEntry, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -376,6 +378,9 @@ func buildTree(path string, excludeGlobs []glob.Glob) (*filesystem.TreeEntry, er
 		})
 
 		for _, e := range entries {
+			if isSymlinkDirEntry(e) {
+				continue
+			}
 			childPath := filepath.Join(path, e.Name())
 			child, err := buildTree(childPath, excludeGlobs)
 			if err != nil {
@@ -390,4 +395,18 @@ func buildTree(path string, excludeGlobs []glob.Glob) (*filesystem.TreeEntry, er
 	}
 
 	return entry, nil
+}
+
+func isSymlinkDirEntry(entry os.DirEntry) bool {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return true
+	}
+	if entry.Type() != 0 {
+		return false
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
 }

@@ -240,3 +240,42 @@ func TestHandleReadTextFileWithLineNumbersEmptyFile(t *testing.T) {
 		t.Errorf("expected empty string, got: %q", textContent.Text)
 	}
 }
+
+func TestHandleReadTextFileFollowsSymlinksWithinAllowed(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	// Create a real file
+	realFile := filepath.Join(tmpDir, "real.txt")
+	expectedContent := "content from real file"
+	if err := os.WriteFile(realFile, []byte(expectedContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink to the real file (within the same allowed directory)
+	linkFile := filepath.Join(tmpDir, "link.txt")
+	if err := os.Symlink(realFile, linkFile); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": linkFile}
+
+	result, err := HandleReadTextFile(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("expected success when reading through symlink within allowed directories: %v", result.Content)
+		return
+	}
+
+	textContent, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatal("expected TextContent")
+	}
+
+	if textContent.Text != expectedContent {
+		t.Errorf("expected %q, got %q", expectedContent, textContent.Text)
+	}
+}

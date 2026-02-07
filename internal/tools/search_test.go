@@ -128,3 +128,41 @@ func TestHandleSearchFilesJSON(t *testing.T) {
 		t.Fatalf("expected matches in json output")
 	}
 }
+
+func TestHandleSearchFilesSkipsSymlinks(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	os.MkdirAll(filepath.Join(tmpDir, "dir"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "dir", "nested.txt"), []byte("test"), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("test"), 0644)
+
+	linkFile := filepath.Join(tmpDir, "linkfile.txt")
+	if err := os.Symlink(filepath.Join(tmpDir, "file.txt"), linkFile); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	linkDir := filepath.Join(tmpDir, "linkdir")
+	if err := os.Symlink(filepath.Join(tmpDir, "dir"), linkDir); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": tmpDir, "pattern": "**/*.txt"}
+
+	result, err := HandleSearchFiles(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	if strings.Contains(output, "linkfile.txt") {
+		t.Error("symlinked file should not be included in output")
+	}
+	if strings.Contains(output, filepath.ToSlash(filepath.Join("linkdir", "nested.txt"))) {
+		t.Error("symlinked directory contents should not be included in output")
+	}
+}

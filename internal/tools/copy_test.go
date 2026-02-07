@@ -91,6 +91,20 @@ func TestHandleCopyFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name: "destination parent symlink fails",
+			args: map[string]any{
+				"source":      srcFile,
+				"destination": filepath.Join(tmpDir, "linkdir", "dest.txt"),
+			},
+			setup: func(t *testing.T) {
+				outside := t.TempDir()
+				if err := os.Symlink(outside, filepath.Join(tmpDir, "linkdir")); err != nil {
+					t.Skip("cannot create symlink")
+				}
+			},
+			isError: true,
+		},
 	}
 
 	for _, tt := range tests {

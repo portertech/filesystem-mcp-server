@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,9 +72,15 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 
 	var matches []string
 
-	err = filepath.Walk(resolvedPath, func(walkPath string, info os.FileInfo, err error) error {
+	err = filepath.WalkDir(resolvedPath, func(walkPath string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // Continue on errors
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.Type()&os.ModeDir != 0 || entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		relPath, relErr := filepath.Rel(resolvedPath, walkPath)
@@ -85,7 +92,7 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 		// Check exclusions
 		for _, g := range excludeGlobs {
 			if g.Match(relPath) {
-				if info.IsDir() {
+				if entry.IsDir() {
 					return filepath.SkipDir
 				}
 				return nil

@@ -154,3 +154,45 @@ func TestGetIndent(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleEditFileRejectsSymlinks(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	// Create a real file
+	realFile := filepath.Join(tmpDir, "real.txt")
+	if err := os.WriteFile(realFile, []byte("hello world"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a symlink to the real file
+	linkFile := filepath.Join(tmpDir, "link.txt")
+	if err := os.Symlink(realFile, linkFile); err != nil {
+		t.Skip("cannot create symlink")
+	}
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{
+		"path": linkFile,
+		"edits": []interface{}{
+			map[string]interface{}{"oldText": "hello", "newText": "goodbye"},
+		},
+	}
+
+	result, err := HandleEditFile(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.IsError {
+		t.Error("expected error when editing through symlink")
+	}
+
+	// Verify original file is unchanged
+	data, err := os.ReadFile(realFile)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	if string(data) != "hello world" {
+		t.Errorf("original file should be unchanged, got %q", string(data))
+	}
+}

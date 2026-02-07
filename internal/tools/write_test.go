@@ -94,6 +94,21 @@ func TestHandleWriteFile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "write fails when parent is symlink",
+			args: map[string]any{
+				"path":    filepath.Join(tmpDir, "linkdir", "file.txt"),
+				"content": "test",
+			},
+			isError: true,
+			setup: func(t *testing.T) {
+				outside := t.TempDir()
+				link := filepath.Join(tmpDir, "linkdir")
+				if err := os.Symlink(outside, link); err != nil {
+					t.Skip("cannot create symlink")
+				}
+			},
+		},
 	}
 
 	// Create existing file for overwrite test

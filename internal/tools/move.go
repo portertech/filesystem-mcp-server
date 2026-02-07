@@ -7,7 +7,6 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
-	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/spf13/cast"
 )
 
@@ -47,13 +46,13 @@ func HandleMoveFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
 	}
 
-	// Check if destination exists
-	if _, err := os.Stat(resolvedDst); err == nil {
-		return mcp.NewToolResultError("destination already exists"), nil
+	if err := validateNoSymlinkPath(destination, reg.Get()); err != nil {
+		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
 	}
 
-	if _, err := security.ValidateFinalPathForCreation(destination, reg.Get()); err != nil {
-		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
+	// Check if destination exists
+	if _, err := os.Lstat(resolvedDst); err == nil {
+		return mcp.NewToolResultError("destination already exists"), nil
 	}
 
 	// Move the file

@@ -74,6 +74,23 @@ func TestHandleMoveFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name: "move fails if destination parent is symlink",
+			setup: func() (string, string) {
+				src := filepath.Join(tmpDir, "src4.txt")
+				if err := os.WriteFile(src, []byte("test"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				outside := t.TempDir()
+				link := filepath.Join(tmpDir, "linkdir")
+				if err := os.Symlink(outside, link); err != nil {
+					t.Skip("cannot create symlink")
+				}
+				dst := filepath.Join(tmpDir, "linkdir", "dest.txt")
+				return src, dst
+			},
+			isError: true,
+		},
 	}
 
 	for _, tt := range tests {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
+	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/portertech/filesystem-mcp-server/pkg/filesystem"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cast"
@@ -55,7 +56,8 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 		}
 	}
 
-	resolvedPath, err := reg.Validate(path)
+	// Use ValidateFinalPath to reject symlinks - editing through symlinks is a security risk
+	resolvedPath, err := security.ValidateFinalPath(path, reg.Get())
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
