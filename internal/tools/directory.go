@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/gobwas/glob"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -51,12 +52,14 @@ func NewListDirectoryTool(reg *registry.Registry) mcp.Tool {
 		"list_directory",
 		mcp.WithDescription("List contents of a directory with [FILE] and [DIR] prefixes."),
 		mcp.WithString("path", mcp.Description("Path to the directory to list"), mcp.Required()),
+		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }
 
 // HandleListDirectory handles the list_directory tool.
 func HandleListDirectory(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path := cast.ToString(request.Params.Arguments["path"])
+	format := cast.ToString(request.Params.Arguments["format"])
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
@@ -74,6 +77,36 @@ func HandleListDirectory(ctx context.Context, reg *registry.Registry, request mc
 	entries, err := os.ReadDir(resolvedPath)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to read directory: %v", err)), nil
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
+	if format == "json" {
+		type listEntry struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		}
+
+		listEntries := make([]listEntry, 0, len(entries))
+		for _, entry := range entries {
+			entryType := "file"
+			if entry.IsDir() {
+				entryType = "directory"
+			}
+			listEntries = append(listEntries, listEntry{
+				Name: entry.Name(),
+				Type: entryType,
+			})
+		}
+
+		jsonResult, err := json.MarshalIndent(listEntries, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+		}
+
+		return mcp.NewToolResultText(string(jsonResult)), nil
 	}
 
 	var result string
@@ -94,7 +127,9 @@ func NewListDirectoryWithSizesTool(reg *registry.Registry) mcp.Tool {
 		"list_directory_with_sizes",
 		mcp.WithDescription("List directory contents with file sizes in human-readable format."),
 		mcp.WithString("path", mcp.Description("Path to the directory to list"), mcp.Required()),
-		mcp.WithString("sortBy", mcp.Description("Sort by 'name' or 'size'")),
+		mcp.WithString("sortBy", mcp.Description("Sort by 'name', 'size', or 'modified'")),
+		mcp.WithString("order", mcp.Description("Sort order: 'asc' or 'desc'")),
+		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }
 
@@ -102,6 +137,8 @@ func NewListDirectoryWithSizesTool(reg *registry.Registry) mcp.Tool {
 func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path := cast.ToString(request.Params.Arguments["path"])
 	sortBy := cast.ToString(request.Params.Arguments["sortBy"])
+	order := cast.ToString(request.Params.Arguments["order"])
+	format := cast.ToString(request.Params.Arguments["format"])
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
@@ -121,10 +158,15 @@ func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, r
 		return mcp.NewToolResultError(fmt.Sprintf("failed to read directory: %v", err)), nil
 	}
 
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
 	type fileEntry struct {
-		name  string
-		isDir bool
-		size  int64
+		name     string
+		isDir    bool
+		size     int64
+		modified int64
 	}
 
 	var files []fileEntry
@@ -137,28 +179,92 @@ func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, r
 			isDir: entry.IsDir(),
 		}
 
-		if entry.IsDir() {
-			dirCount++
-		} else {
-			fileCount++
-			if entryInfo, err := entry.Info(); err == nil {
+		entryInfo, infoErr := entry.Info()
+		if infoErr == nil {
+			fe.modified = entryInfo.ModTime().UnixNano()
+			if !entry.IsDir() {
 				fe.size = entryInfo.Size()
 				totalSize += fe.size
 			}
 		}
 
+		if entry.IsDir() {
+			dirCount++
+		} else {
+			fileCount++
+		}
+
 		files = append(files, fe)
 	}
 
-	// Sort
-	if sortBy == "size" {
-		sort.Slice(files, func(i, j int) bool {
+	if order == "" {
+		order = "asc"
+	}
+	ascending := order != "desc"
+
+	sort.Slice(files, func(i, j int) bool {
+		if sortBy == "size" {
+			if files[i].size == files[j].size {
+				return files[i].name < files[j].name
+			}
+			if ascending {
+				return files[i].size < files[j].size
+			}
 			return files[i].size > files[j].size
-		})
-	} else {
-		sort.Slice(files, func(i, j int) bool {
+		}
+		if sortBy == "modified" {
+			if files[i].modified == files[j].modified {
+				return files[i].name < files[j].name
+			}
+			if ascending {
+				return files[i].modified < files[j].modified
+			}
+			return files[i].modified > files[j].modified
+		}
+		if ascending {
 			return files[i].name < files[j].name
-		})
+		}
+		return files[i].name > files[j].name
+	})
+
+	if format == "json" {
+		type listEntry struct {
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Size     int64  `json:"size"`
+			Modified string `json:"modified"`
+		}
+
+		entries := make([]listEntry, 0, len(files))
+		for _, f := range files {
+			entryType := "file"
+			if f.isDir {
+				entryType = "directory"
+			}
+			entries = append(entries, listEntry{
+				Name:     f.name,
+				Type:     entryType,
+				Size:     f.size,
+				Modified: time.Unix(0, f.modified).UTC().Format(time.RFC3339),
+			})
+		}
+
+		payload := map[string]any{
+			"entries": entries,
+			"summary": map[string]any{
+				"files":         fileCount,
+				"directories":   dirCount,
+				"totalSize":     totalSize,
+				"totalSizeText": stream.FormatSize(totalSize),
+			},
+		}
+
+		jsonResult, err := json.MarshalIndent(payload, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+		}
+
+		return mcp.NewToolResultText(string(jsonResult)), nil
 	}
 
 	var result string
@@ -258,6 +364,10 @@ func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
 		if err != nil {
 			return entry
 		}
+
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Name() < entries[j].Name()
+		})
 
 		for _, e := range entries {
 			childPath := filepath.Join(path, e.Name())

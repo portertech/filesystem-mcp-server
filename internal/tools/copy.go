@@ -19,6 +19,12 @@ func NewCopyFileTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithString("source", mcp.Description("Path to the source file"), mcp.Required()),
 		mcp.WithString("destination", mcp.Description("Path to the destination file"), mcp.Required()),
 		mcp.WithBoolean("overwrite", mcp.Description("If true, overwrite existing destination file")),
+		mcp.WithToolAnnotation(mcp.ToolAnnotation{
+			Title:           "Copy File",
+			ReadOnlyHint:    boolPtr(false),
+			IdempotentHint:  boolPtr(false),
+			DestructiveHint: boolPtr(true),
+		}),
 	)
 }
 

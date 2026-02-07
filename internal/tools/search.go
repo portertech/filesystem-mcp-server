@@ -2,9 +2,11 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gobwas/glob"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -20,6 +22,7 @@ func NewSearchFilesTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithString("path", mcp.Description("Starting directory for the search"), mcp.Required()),
 		mcp.WithString("pattern", mcp.Description("Glob pattern to match file names"), mcp.Required()),
 		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude")),
+		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }
 
@@ -27,6 +30,7 @@ func NewSearchFilesTool(reg *registry.Registry) mcp.Tool {
 func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path := cast.ToString(request.Params.Arguments["path"])
 	pattern := cast.ToString(request.Params.Arguments["pattern"])
+	format := cast.ToString(request.Params.Arguments["format"])
 
 	var excludePatterns []string
 	if patternsArg, ok := request.Params.Arguments["excludePatterns"].([]interface{}); ok {
@@ -49,7 +53,7 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 	}
 
 	// Compile match pattern
-	matchGlob, err := glob.Compile(pattern)
+	matchGlobs, err := compileGlobs(pattern)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("invalid pattern %q: %v", pattern, err)), nil
 	}
@@ -57,11 +61,11 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 	// Compile exclude patterns
 	var excludeGlobs []glob.Glob
 	for _, p := range excludePatterns {
-		g, err := glob.Compile(p)
+		globs, err := compileGlobs(p)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid exclude pattern %q: %v", p, err)), nil
 		}
-		excludeGlobs = append(excludeGlobs, g)
+		excludeGlobs = append(excludeGlobs, globs...)
 	}
 
 	var matches []string
@@ -71,11 +75,15 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 			return nil // Continue on errors
 		}
 
-		name := info.Name()
+		relPath, relErr := filepath.Rel(resolvedPath, walkPath)
+		if relErr != nil {
+			return nil
+		}
+		relPath = filepath.ToSlash(relPath)
 
 		// Check exclusions
 		for _, g := range excludeGlobs {
-			if g.Match(name) {
+			if g.Match(relPath) {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}
@@ -84,7 +92,7 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 		}
 
 		// Check match
-		if matchGlob.Match(name) {
+		if relPath != "." && matchesAny(matchGlobs, relPath) {
 			matches = append(matches, walkPath)
 		}
 
@@ -93,6 +101,14 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("search failed: %v", err)), nil
+	}
+
+	if format == "json" {
+		jsonResult, err := json.MarshalIndent(matches, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(jsonResult)), nil
 	}
 
 	if len(matches) == 0 {
@@ -105,4 +121,36 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 	}
 
 	return mcp.NewToolResultText(result), nil
+}
+
+func compileGlobs(pattern string) ([]glob.Glob, error) {
+	patterns := []string{pattern}
+	if strings.Contains(pattern, "**/") {
+		patterns = append(patterns, strings.ReplaceAll(pattern, "**/", ""))
+	}
+	if strings.HasPrefix(pattern, "**") {
+		patterns = append(patterns, strings.TrimPrefix(pattern, "**"))
+	}
+	if strings.HasPrefix(pattern, "**/") {
+		patterns = append(patterns, strings.TrimPrefix(pattern, "**/"))
+	}
+
+	globs := make([]glob.Glob, 0, len(patterns))
+	for _, p := range patterns {
+		g, err := glob.Compile(p)
+		if err != nil {
+			return nil, err
+		}
+		globs = append(globs, g)
+	}
+	return globs, nil
+}
+
+func matchesAny(globs []glob.Glob, path string) bool {
+	for _, g := range globs {
+		if g.Match(path) {
+			return true
+		}
+	}
+	return false
 }

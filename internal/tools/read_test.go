@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,6 +108,39 @@ func TestHandleReadMultipleFiles(t *testing.T) {
 
 	if result.IsError {
 		t.Errorf("unexpected error: %v", result.Content)
+	}
+}
+
+func TestHandleReadMultipleFilesJSON(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	file1 := filepath.Join(tmpDir, "file1.txt")
+	if err := os.WriteFile(file1, []byte("content1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{
+		"paths":  []interface{}{file1, filepath.Join(tmpDir, "missing.txt")},
+		"format": "json",
+	}
+
+	result, err := HandleReadMultipleFiles(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(output), &entries); err != nil {
+		t.Fatalf("expected valid json output: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries in json output")
 	}
 }
 

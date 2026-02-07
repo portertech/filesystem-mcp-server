@@ -20,6 +20,7 @@ func NewDeleteFileTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithString("path", mcp.Description("Path to the file to delete"), mcp.Required()),
 		mcp.WithToolAnnotation(mcp.ToolAnnotation{
 			Title:           "Delete File",
+			ReadOnlyHint:    boolPtr(false),
 			DestructiveHint: boolPtr(true),
 			IdempotentHint:  boolPtr(false),
 		}),
@@ -64,6 +65,7 @@ func NewDeleteDirectoryTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithBoolean("recursive", mcp.Description("If true, delete directory and all contents")),
 		mcp.WithToolAnnotation(mcp.ToolAnnotation{
 			Title:           "Delete Directory",
+			ReadOnlyHint:    boolPtr(false),
 			DestructiveHint: boolPtr(true),
 			IdempotentHint:  boolPtr(false),
 		}),

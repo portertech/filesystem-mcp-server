@@ -65,6 +65,28 @@ func TestHandleEditFile(t *testing.T) {
 			},
 			isError: true,
 		},
+		{
+			name:           "multiple matches fail by default",
+			initialContent: "repeat repeat",
+			args: map[string]any{
+				"path": filepath.Join(tmpDir, "edit5.txt"),
+				"edits": []interface{}{
+					map[string]interface{}{"oldText": "repeat", "newText": "done"},
+				},
+			},
+			isError: true,
+		},
+		{
+			name:           "multiple matches with occurrence",
+			initialContent: "repeat repeat",
+			args: map[string]any{
+				"path": filepath.Join(tmpDir, "edit6.txt"),
+				"edits": []interface{}{
+					map[string]interface{}{"oldText": "repeat", "newText": "done", "requireUnique": false, "occurrence": 2},
+				},
+			},
+			expectedContent: "repeat done",
+		},
 	}
 
 	for _, tt := range tests {

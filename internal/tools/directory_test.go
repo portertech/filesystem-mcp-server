@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,13 +84,47 @@ func TestHandleListDirectory(t *testing.T) {
 		t.Errorf("unexpected error: %v", result.Content)
 	}
 
-	// Check output contains expected entries
 	output := result.Content[0].(mcp.TextContent).Text
-	if !strings.Contains(output, "[FILE] file1.txt") {
-		t.Error("expected file1.txt in output")
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d", len(lines))
 	}
-	if !strings.Contains(output, "[DIR] subdir") {
-		t.Error("expected subdir in output")
+	if lines[0] != "[FILE] file1.txt" {
+		t.Errorf("expected first line to be file1.txt, got %q", lines[0])
+	}
+	if lines[1] != "[FILE] file2.txt" {
+		t.Errorf("expected second line to be file2.txt, got %q", lines[1])
+	}
+	if lines[2] != "[DIR] subdir" {
+		t.Errorf("expected third line to be subdir, got %q", lines[2])
+	}
+}
+
+func TestHandleListDirectoryJSON(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("test"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "subdir"), 0755)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": tmpDir, "format": "json"}
+
+	result, err := HandleListDirectory(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	var entries []map[string]string
+	if err := json.Unmarshal([]byte(output), &entries); err != nil {
+		t.Fatalf("expected valid json output: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("expected entries in json output")
 	}
 }
 
@@ -115,6 +150,35 @@ func TestHandleListDirectoryWithSizes(t *testing.T) {
 	output := result.Content[0].(mcp.TextContent).Text
 	if !strings.Contains(output, "Summary:") {
 		t.Error("expected Summary in output")
+	}
+}
+
+func TestHandleListDirectoryWithSizesJSON(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	os.WriteFile(filepath.Join(tmpDir, "small.txt"), []byte("small"), 0644)
+	os.MkdirAll(filepath.Join(tmpDir, "subdir"), 0755)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": tmpDir, "sortBy": "name", "format": "json"}
+
+	result, err := HandleListDirectoryWithSizes(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("expected valid json output: %v", err)
+	}
+	entries, ok := payload["entries"].([]interface{})
+	if !ok || len(entries) == 0 {
+		t.Fatalf("expected entries in json output")
 	}
 }
 
@@ -148,5 +212,27 @@ func TestHandleDirectoryTree(t *testing.T) {
 	}
 	if !strings.Contains(output, "nested.txt") {
 		t.Error("expected nested.txt in output")
+	}
+
+	var tree struct {
+		Name     string `json:"name"`
+		Type     string `json:"type"`
+		Children []struct {
+			Name     string `json:"name"`
+			Type     string `json:"type"`
+			Children []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"children"`
+		} `json:"children"`
+	}
+	if err := json.Unmarshal([]byte(output), &tree); err != nil {
+		t.Fatalf("expected valid json output: %v", err)
+	}
+	if len(tree.Children) == 0 {
+		t.Fatalf("expected children in tree output")
+	}
+	if tree.Children[0].Name != "a" {
+		t.Fatalf("expected first child to be 'a', got %q", tree.Children[0].Name)
 	}
 }

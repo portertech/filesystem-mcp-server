@@ -20,6 +20,8 @@ type TreeEntry struct {
 
 // EditOperation represents a single find/replace edit.
 type EditOperation struct {
-	OldText string `json:"oldText"`
-	NewText string `json:"newText"`
+	OldText       string `json:"oldText"`
+	NewText       string `json:"newText"`
+	RequireUnique *bool  `json:"requireUnique,omitempty"`
+	Occurrence    *int   `json:"occurrence,omitempty"`
 }

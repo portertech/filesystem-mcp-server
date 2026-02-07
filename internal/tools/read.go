@@ -3,6 +3,7 @@ package tools
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
@@ -141,12 +142,14 @@ func NewReadMultipleFilesTool(reg *registry.Registry) mcp.Tool {
 		"read_multiple_files",
 		mcp.WithDescription("Read multiple files concurrently. Returns content with paths as references."),
 		mcp.WithArray("paths", mcp.Description("Array of file paths to read"), mcp.Required()),
+		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }
 
 // HandleReadMultipleFiles handles the read_multiple_files tool.
 func HandleReadMultipleFiles(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	pathsArg := request.Params.Arguments["paths"]
+	format := cast.ToString(request.Params.Arguments["format"])
 	var paths []string
 	if arr, ok := pathsArg.([]interface{}); ok {
 		for _, v := range arr {
@@ -209,6 +212,31 @@ func HandleReadMultipleFiles(ctx context.Context, reg *registry.Registry, reques
 	}
 
 	wg.Wait()
+
+	if format == "json" {
+		type fileEntry struct {
+			Path    string `json:"path"`
+			Content string `json:"content,omitempty"`
+			Error   string `json:"error,omitempty"`
+		}
+
+		entries := make([]fileEntry, 0, len(results))
+		for _, r := range results {
+			entry := fileEntry{Path: r.path}
+			if r.err != nil {
+				entry.Error = r.err.Error()
+			} else {
+				entry.Content = r.content
+			}
+			entries = append(entries, entry)
+		}
+
+		jsonResult, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	}
 
 	// Build response
 	var output string

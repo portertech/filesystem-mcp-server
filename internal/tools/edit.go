@@ -34,9 +34,21 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	if editsArg, ok := request.Params.Arguments["edits"].([]interface{}); ok {
 		for _, e := range editsArg {
 			if editMap, ok := e.(map[string]interface{}); ok {
+				var requireUnique *bool
+				if val, ok := editMap["requireUnique"]; ok {
+					parsed := cast.ToBool(val)
+					requireUnique = &parsed
+				}
+				var occurrence *int
+				if val, ok := editMap["occurrence"]; ok {
+					parsed := cast.ToInt(val)
+					occurrence = &parsed
+				}
 				edits = append(edits, filesystem.EditOperation{
-					OldText: cast.ToString(editMap["oldText"]),
-					NewText: cast.ToString(editMap["newText"]),
+					OldText:       cast.ToString(editMap["oldText"]),
+					NewText:       cast.ToString(editMap["newText"]),
+					RequireUnique: requireUnique,
+					Occurrence:    occurrence,
 				})
 			}
 		}
@@ -62,21 +74,29 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 			return mcp.NewToolResultError(fmt.Sprintf("edit %d: oldText cannot be empty", i+1)), nil
 		}
 
-		// Try exact match first
-		if strings.Contains(newContent, edit.OldText) {
-			newContent = strings.Replace(newContent, edit.OldText, edit.NewText, 1)
-		} else {
-			// Try whitespace-normalized matching
-			normalizedContent := normalizeWhitespace(newContent)
-			normalizedOld := normalizeWhitespace(edit.OldText)
-
-			if strings.Contains(normalizedContent, normalizedOld) {
-				// Find the original text with preserved indentation
-				newContent = replaceWithIndentPreservation(newContent, edit.OldText, edit.NewText)
-			} else {
-				return mcp.NewToolResultError(fmt.Sprintf("edit %d: oldText not found in file", i+1)), nil
-			}
+		requireUnique := true
+		if edit.RequireUnique != nil {
+			requireUnique = *edit.RequireUnique
 		}
+
+		if edit.Occurrence != nil && *edit.Occurrence < 1 {
+			return mcp.NewToolResultError(fmt.Sprintf("edit %d: occurrence must be >= 1", i+1)), nil
+		}
+
+		matchInfo, matchErr := findMatch(newContent, edit.OldText, requireUnique)
+		if matchErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("edit %d: %v", i+1, matchErr)), nil
+		}
+
+		occurrence := 1
+		if edit.Occurrence != nil {
+			occurrence = *edit.Occurrence
+		}
+		if occurrence > len(matchInfo.Matches) {
+			return mcp.NewToolResultError(fmt.Sprintf("edit %d: occurrence %d out of range", i+1, occurrence)), nil
+		}
+
+		newContent = applyMatch(newContent, edit.OldText, edit.NewText, matchInfo, occurrence)
 	}
 
 	// Generate unified diff
@@ -110,12 +130,67 @@ func normalizeWhitespace(s string) string {
 }
 
 // replaceWithIndentPreservation replaces text while preserving indentation.
-func replaceWithIndentPreservation(content, oldText, newText string) string {
+type matchInfo struct {
+	Matches           []int
+	NormalizedMatches []int
+	OldTextNormalized string
+}
+
+func findMatch(content, oldText string, requireUnique bool) (matchInfo, error) {
+	if oldText == "" {
+		return matchInfo{}, fmt.Errorf("oldText cannot be empty")
+	}
+
+	info := matchInfo{
+		OldTextNormalized: normalizeWhitespace(oldText),
+	}
+
+	for idx := 0; idx <= len(content)-len(oldText); idx++ {
+		if strings.HasPrefix(content[idx:], oldText) {
+			info.Matches = append(info.Matches, idx)
+		}
+	}
+
+	normalizedContent := normalizeWhitespace(content)
+	if info.OldTextNormalized != "" {
+		for idx := 0; idx <= len(normalizedContent)-len(info.OldTextNormalized); idx++ {
+			if strings.HasPrefix(normalizedContent[idx:], info.OldTextNormalized) {
+				info.NormalizedMatches = append(info.NormalizedMatches, idx)
+			}
+		}
+	}
+
+	if len(info.Matches) == 0 && len(info.NormalizedMatches) == 0 {
+		return matchInfo{}, fmt.Errorf("oldText not found in file")
+	}
+	if requireUnique {
+		count := len(info.Matches)
+		if count == 0 {
+			count = len(info.NormalizedMatches)
+		}
+		if count > 1 {
+			return matchInfo{}, fmt.Errorf("oldText matches multiple locations")
+		}
+	}
+
+	return info, nil
+}
+
+func applyMatch(content, oldText, newText string, info matchInfo, occurrence int) string {
+	if len(info.Matches) > 0 {
+		index := info.Matches[occurrence-1]
+		return content[:index] + newText + content[index+len(oldText):]
+	}
+	return replaceWithIndentPreservation(content, oldText, newText, occurrence)
+}
+
+func replaceWithIndentPreservation(content, oldText, newText string, occurrence int) string {
 	lines := strings.Split(content, "\n")
 	oldLines := strings.Split(oldText, "\n")
 	newLines := strings.Split(newText, "\n")
 
 	// Find the start of oldText in content
+	matchIndex := 0
 	for i := 0; i <= len(lines)-len(oldLines); i++ {
 		match := true
 		var indent string
@@ -137,6 +212,11 @@ func replaceWithIndentPreservation(content, oldText, newText string) string {
 		}
 
 		if match {
+			matchIndex++
+			if matchIndex != occurrence {
+				continue
+			}
+
 			// Build replacement with preserved indentation
 			var result []string
 			result = append(result, lines[:i]...)

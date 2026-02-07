@@ -3,6 +3,7 @@ package stream
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -72,6 +73,67 @@ func TestTailFile(t *testing.T) {
 				t.Errorf("TailFile(%d) = %q, want %q", tt.n, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestTailFileLargeLine(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "large-line.txt")
+
+	longLine := strings.Repeat("x", TailChunkSize*3)
+	content := "first\n" + longLine + "\nlast\n"
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := TailFile(testFile, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != longLine+"\nlast" {
+		t.Fatalf("unexpected tail result length: got %d", len(result))
+	}
+}
+
+func TestTailFileNoTrailingNewline(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "no-trailing.txt")
+
+	content := "line1\nline2\nline3"
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := TailFile(testFile, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "line2\nline3" {
+		t.Fatalf("TailFile returned %q", result)
+	}
+}
+
+func TestTailFileVeryLarge(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "very-large.txt")
+
+	var builder strings.Builder
+	lineCount := 5000
+	for i := 1; i <= lineCount; i++ {
+		builder.WriteString("line")
+		builder.WriteString(strconv.Itoa(i))
+		builder.WriteString("\n")
+	}
+	if err := os.WriteFile(testFile, []byte(builder.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := TailFile(testFile, 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "line4998\nline4999\nline5000" {
+		t.Fatalf("TailFile returned %q", result)
 	}
 }
 

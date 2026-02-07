@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,9 +34,9 @@ func TestHandleSearchFiles(t *testing.T) {
 			name: "find all txt files",
 			args: map[string]any{
 				"path":    tmpDir,
-				"pattern": "*.txt",
+				"pattern": "**/*.txt",
 			},
-			contains: []string{"test.txt", "nested.txt", "deep.txt"},
+			contains: []string{filepath.ToSlash(filepath.Join("test.txt")), filepath.ToSlash(filepath.Join("a", "nested.txt")), filepath.ToSlash(filepath.Join("a", "b", "deep.txt"))},
 		},
 		{
 			name: "find go files",
@@ -49,11 +50,11 @@ func TestHandleSearchFiles(t *testing.T) {
 			name: "with exclude pattern",
 			args: map[string]any{
 				"path":            tmpDir,
-				"pattern":         "*.txt",
-				"excludePatterns": []interface{}{"excluded"},
+				"pattern":         "**/*.txt",
+				"excludePatterns": []interface{}{"excluded/**"},
 			},
-			contains:    []string{"test.txt"},
-			notContains: []string{"skip.txt"},
+			contains:    []string{filepath.ToSlash(filepath.Join("test.txt"))},
+			notContains: []string{filepath.ToSlash(filepath.Join("excluded", "skip.txt"))},
 		},
 		{
 			name: "no matches",
@@ -97,5 +98,33 @@ func TestHandleSearchFiles(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHandleSearchFilesJSON(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	os.MkdirAll(filepath.Join(tmpDir, "a"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "a", "nested.txt"), []byte("test"), 0644)
+
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"path": tmpDir, "pattern": "**/*.txt", "format": "json"}
+
+	result, err := HandleSearchFiles(context.Background(), reg, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.IsError {
+		t.Errorf("unexpected error: %v", result.Content)
+	}
+
+	output := result.Content[0].(mcp.TextContent).Text
+	var matches []string
+	if err := json.Unmarshal([]byte(output), &matches); err != nil {
+		t.Fatalf("expected valid json output: %v", err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("expected matches in json output")
 	}
 }
