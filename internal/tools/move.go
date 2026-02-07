@@ -32,18 +32,18 @@ func HandleMoveFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	// Validate source path
 	resolvedSrc, err := reg.Validate(source)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("source path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("source path validation failed: %w", err).Error()), nil
 	}
 
 	// Check source exists
 	if _, err := os.Stat(resolvedSrc); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("source does not exist: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("source does not exist: %w", err).Error()), nil
 	}
 
 	// Validate destination path
 	resolvedDst, err := reg.ValidateForCreation(destination)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("destination path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
 	}
 
 	// Check if destination exists
@@ -53,7 +53,7 @@ func HandleMoveFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 	// Move the file
 	if err := os.Rename(resolvedSrc, resolvedDst); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to move: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to move: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully moved %s to %s", resolvedSrc, resolvedDst)), nil

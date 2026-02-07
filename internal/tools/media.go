@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-// MIME type mappings
+// mimeTypes maps file extensions to MIME types for media reads.
 var mimeTypes = map[string]string{
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
@@ -43,7 +43,7 @@ func HandleReadMediaFile(ctx context.Context, reg *registry.Registry, request mc
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Get MIME type from extension
@@ -56,7 +56,7 @@ func HandleReadMediaFile(ctx context.Context, reg *registry.Registry, request mc
 	// Stream to base64
 	base64Data, err := stream.StreamToBase64(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read media file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read media file: %w", err).Error()), nil
 	}
 
 	// Determine content type category
@@ -78,7 +78,7 @@ func HandleReadMediaFile(ctx context.Context, reg *registry.Registry, request mc
 
 	jsonResult, err := json.Marshal(result)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to marshal result: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(string(jsonResult)), nil

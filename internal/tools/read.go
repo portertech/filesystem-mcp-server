@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cast"
 )
 
+const maxConcurrentReads = 10
+
 // NewReadTextFileTool creates the read_text_file tool.
 func NewReadTextFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
@@ -35,13 +37,13 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Check if it's a directory
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat file: %w", err).Error()), nil
 	}
 	if info.IsDir() {
 		return mcp.NewToolResultError("path is a directory, not a file"), nil
@@ -57,7 +59,7 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 			// For tail with line numbers, we need to find the starting line
 			totalLines, countErr := countFileLines(resolvedPath)
 			if countErr != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to count lines: %v", countErr)), nil
+				return mcp.NewToolResultError(fmt.Errorf("failed to count lines: %w", countErr).Error()), nil
 			}
 			startLine := totalLines - tail + 1
 			if startLine < 1 {
@@ -80,7 +82,7 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 	}
 
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(content), nil
@@ -117,12 +119,12 @@ func HandleReadFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat file: %w", err).Error()), nil
 	}
 	if info.IsDir() {
 		return mcp.NewToolResultError("path is a directory, not a file"), nil
@@ -130,7 +132,7 @@ func HandleReadFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(string(data)), nil
@@ -169,7 +171,7 @@ func HandleReadMultipleFiles(ctx context.Context, reg *registry.Registry, reques
 
 	results := make([]fileResult, len(paths))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10) // Limit concurrency to 10
+	sem := make(chan struct{}, maxConcurrentReads) // Limit concurrency to 10
 
 	for i, path := range paths {
 		wg.Add(1)
@@ -233,7 +235,7 @@ func HandleReadMultipleFiles(ctx context.Context, reg *registry.Registry, reques
 
 		jsonResult, err := json.MarshalIndent(entries, "", "  ")
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to marshal result: %w", err).Error()), nil
 		}
 		return mcp.NewToolResultText(string(jsonResult)), nil
 	}

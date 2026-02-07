@@ -37,13 +37,13 @@ func HandleCopyFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	// Validate source path
 	resolvedSrc, err := reg.Validate(source)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("source path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("source path validation failed: %w", err).Error()), nil
 	}
 
 	// Check source exists and is a file
 	srcInfo, err := os.Stat(resolvedSrc)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat source: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat source: %w", err).Error()), nil
 	}
 	if srcInfo.IsDir() {
 		return mcp.NewToolResultError("source is a directory, not a file"), nil
@@ -52,7 +52,7 @@ func HandleCopyFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	// Validate destination path
 	resolvedDst, err := reg.ValidateForCreation(destination)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("destination path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("destination path validation failed: %w", err).Error()), nil
 	}
 
 	// Check if destination exists
@@ -64,7 +64,7 @@ func HandleCopyFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 	// Copy the file
 	if err := stream.CopyFileStreaming(resolvedSrc, resolvedDst); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to copy file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to copy file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully copied %s to %s", resolvedSrc, resolvedDst)), nil

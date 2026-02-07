@@ -9,6 +9,14 @@ import (
 	"github.com/portertech/filesystem-mcp-server/internal/security"
 )
 
+// Validator defines path validation methods used by the registry.
+type Validator interface {
+	Validate(path string) (string, error)
+	ValidateForCreation(path string) (string, error)
+}
+
+var _ Validator = (*Registry)(nil)
+
 // Registry manages the list of allowed directories.
 type Registry struct {
 	mu     sync.RWMutex
@@ -93,7 +101,8 @@ func (r *Registry) Get() []string {
 // Returns the resolved path if valid, or an error if not.
 func (r *Registry) Validate(path string) (string, error) {
 	r.mu.RLock()
-	dirs := r.dirs
+	dirs := make([]string, len(r.dirs))
+	copy(dirs, r.dirs)
 	r.mu.RUnlock()
 
 	return security.ValidatePath(path, dirs)
@@ -102,7 +111,8 @@ func (r *Registry) Validate(path string) (string, error) {
 // ValidateForCreation validates a path for file/directory creation.
 func (r *Registry) ValidateForCreation(path string) (string, error) {
 	r.mu.RLock()
-	dirs := r.dirs
+	dirs := make([]string, len(r.dirs))
+	copy(dirs, r.dirs)
 	r.mu.RUnlock()
 
 	return security.ValidatePathForCreation(path, dirs)

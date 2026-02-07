@@ -36,11 +36,11 @@ func HandleCreateDirectory(ctx context.Context, reg *registry.Registry, request 
 
 	resolvedPath, err := reg.ValidateForCreation(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	if err := os.MkdirAll(resolvedPath, 0755); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to create directory: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to create directory: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully created directory %s", resolvedPath)), nil
@@ -63,12 +63,12 @@ func HandleListDirectory(ctx context.Context, reg *registry.Registry, request mc
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 	if !info.IsDir() {
 		return mcp.NewToolResultError("path is not a directory"), nil
@@ -76,7 +76,7 @@ func HandleListDirectory(ctx context.Context, reg *registry.Registry, request mc
 
 	entries, err := os.ReadDir(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read directory: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read directory: %w", err).Error()), nil
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -103,7 +103,7 @@ func HandleListDirectory(ctx context.Context, reg *registry.Registry, request mc
 
 		jsonResult, err := json.MarshalIndent(listEntries, "", "  ")
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to marshal result: %w", err).Error()), nil
 		}
 
 		return mcp.NewToolResultText(string(jsonResult)), nil
@@ -142,12 +142,12 @@ func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, r
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 	if !info.IsDir() {
 		return mcp.NewToolResultError("path is not a directory"), nil
@@ -155,7 +155,7 @@ func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, r
 
 	entries, err := os.ReadDir(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read directory: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read directory: %w", err).Error()), nil
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -261,7 +261,7 @@ func HandleListDirectoryWithSizes(ctx context.Context, reg *registry.Registry, r
 
 		jsonResult, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to marshal result: %w", err).Error()), nil
 		}
 
 		return mcp.NewToolResultText(string(jsonResult)), nil
@@ -305,12 +305,12 @@ func HandleDirectoryTree(ctx context.Context, reg *registry.Registry, request mc
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 	if !info.IsDir() {
 		return mcp.NewToolResultError("path is not a directory"), nil
@@ -321,26 +321,29 @@ func HandleDirectoryTree(ctx context.Context, reg *registry.Registry, request mc
 	for _, pattern := range excludePatterns {
 		g, err := glob.Compile(pattern)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid exclude pattern %q: %v", pattern, err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("invalid exclude pattern %q: %w", pattern, err).Error()), nil
 		}
 		excludeGlobs = append(excludeGlobs, g)
 	}
 
-	tree := buildTree(resolvedPath, excludeGlobs)
+	tree, err := buildTree(resolvedPath, excludeGlobs)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Errorf("failed to build tree: %w", err).Error()), nil
+	}
 
 	jsonResult, err := json.MarshalIndent(tree, "", "  ")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal tree: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to marshal tree: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(string(jsonResult)), nil
 }
 
 // buildTree recursively builds a directory tree.
-func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
+func buildTree(path string, excludeGlobs []glob.Glob) (*filesystem.TreeEntry, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	name := filepath.Base(path)
@@ -348,7 +351,7 @@ func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
 	// Check exclusions
 	for _, g := range excludeGlobs {
 		if g.Match(name) {
-			return nil
+			return nil, nil
 		}
 	}
 
@@ -362,7 +365,7 @@ func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
 
 		entries, err := os.ReadDir(path)
 		if err != nil {
-			return entry
+			return nil, err
 		}
 
 		sort.Slice(entries, func(i, j int) bool {
@@ -371,7 +374,10 @@ func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
 
 		for _, e := range entries {
 			childPath := filepath.Join(path, e.Name())
-			child := buildTree(childPath, excludeGlobs)
+			child, err := buildTree(childPath, excludeGlobs)
+			if err != nil {
+				return nil, err
+			}
 			if child != nil {
 				entry.Children = append(entry.Children, child)
 			}
@@ -380,5 +386,5 @@ func buildTree(path string, excludeGlobs []glob.Glob) *filesystem.TreeEntry {
 		entry.Type = "file"
 	}
 
-	return entry
+	return entry, nil
 }

@@ -2,6 +2,7 @@ package stream
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -229,9 +230,9 @@ func StreamToBase64(path string) (string, error) {
 	}
 
 	// For larger files, stream the encoding
-	var result []byte
+	var result bytes.Buffer
 	buf := make([]byte, DefaultChunkSize)
-	encoder := base64.NewEncoder(base64.StdEncoding, &byteWriter{buf: &result})
+	encoder := base64.NewEncoder(base64.StdEncoding, &result)
 
 	for {
 		n, err := f.Read(buf)
@@ -252,17 +253,7 @@ func StreamToBase64(path string) (string, error) {
 		return "", err
 	}
 
-	return string(result), nil
-}
-
-// byteWriter is a simple writer that appends to a byte slice.
-type byteWriter struct {
-	buf *[]byte
-}
-
-func (w *byteWriter) Write(p []byte) (n int, err error) {
-	*w.buf = append(*w.buf, p...)
-	return len(p), nil
+	return result.String(), nil
 }
 
 // createTempFile creates a temporary file with a cryptographically random suffix.

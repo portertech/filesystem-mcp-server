@@ -30,18 +30,18 @@ func HandleWriteFile(ctx context.Context, reg *registry.Registry, request mcp.Ca
 
 	resolvedPath, err := reg.ValidateForCreation(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Create parent directories if needed
 	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to create directories: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to create directories: %w", err).Error()), nil
 	}
 
 	// Atomic write using temp file
 	if err := atomicWriteFile(resolvedPath, []byte(content), 0644); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to write file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to write file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully wrote to %s", resolvedPath)), nil

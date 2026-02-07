@@ -33,7 +33,7 @@ func HandleDeleteFile(ctx context.Context, reg *registry.Registry, request mcp.C
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Check if path exists and is a file
@@ -42,7 +42,7 @@ func HandleDeleteFile(ctx context.Context, reg *registry.Registry, request mcp.C
 		if os.IsNotExist(err) {
 			return mcp.NewToolResultError("file does not exist"), nil
 		}
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 
 	if info.IsDir() {
@@ -50,7 +50,7 @@ func HandleDeleteFile(ctx context.Context, reg *registry.Registry, request mcp.C
 	}
 
 	if err := os.Remove(resolvedPath); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to delete file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to delete file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted %s", resolvedPath)), nil
@@ -79,7 +79,7 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Check if path exists and is a directory
@@ -88,7 +88,7 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 		if os.IsNotExist(err) {
 			return mcp.NewToolResultError("directory does not exist"), nil
 		}
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 
 	if !info.IsDir() {
@@ -123,19 +123,14 @@ func HandleDeleteDirectory(ctx context.Context, reg *registry.Registry, request 
 		}
 
 		if err := os.RemoveAll(resolvedPath); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to delete directory: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to delete directory: %w", err).Error()), nil
 		}
 	} else {
 		// Non-recursive: only works on empty directories
 		if err := os.Remove(resolvedPath); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to delete directory (may not be empty, use recursive=true): %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to delete directory (may not be empty, use recursive=true): %w", err).Error()), nil
 		}
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted %s", resolvedPath)), nil
-}
-
-// boolPtr returns a pointer to a bool.
-func boolPtr(b bool) *bool {
-	return &b
 }

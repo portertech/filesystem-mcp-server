@@ -56,13 +56,13 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	// Read original content
 	originalData, err := os.ReadFile(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to read file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to read file: %w", err).Error()), nil
 	}
 
 	originalContent := string(originalData)
@@ -85,7 +85,7 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 
 		matchInfo, matchErr := findMatch(newContent, edit.OldText, requireUnique)
 		if matchErr != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("edit %d: %v", i+1, matchErr)), nil
+			return mcp.NewToolResultError(fmt.Errorf("edit %d: %w", i+1, matchErr).Error()), nil
 		}
 
 		occurrence := 1
@@ -109,11 +109,11 @@ func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.Cal
 	// Write the changes atomically
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat file: %w", err).Error()), nil
 	}
 
 	if err := atomicWriteFile(resolvedPath, []byte(newContent), info.Mode().Perm()); err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to write file: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to write file: %w", err).Error()), nil
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully edited %s\n\n%s", resolvedPath, diff)), nil

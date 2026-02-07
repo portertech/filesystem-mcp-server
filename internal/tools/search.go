@@ -41,12 +41,12 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 
 	resolvedPath, err := reg.Validate(path)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("path validation failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("path validation failed: %w", err).Error()), nil
 	}
 
 	info, err := os.Stat(resolvedPath)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to stat path: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("failed to stat path: %w", err).Error()), nil
 	}
 	if !info.IsDir() {
 		return mcp.NewToolResultError("path is not a directory"), nil
@@ -100,13 +100,13 @@ func HandleSearchFiles(ctx context.Context, reg *registry.Registry, request mcp.
 	})
 
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("search failed: %v", err)), nil
+		return mcp.NewToolResultError(fmt.Errorf("search failed: %w", err).Error()), nil
 	}
 
 	if format == "json" {
 		jsonResult, err := json.MarshalIndent(matches, "", "  ")
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Errorf("failed to marshal result: %w", err).Error()), nil
 		}
 		return mcp.NewToolResultText(string(jsonResult)), nil
 	}
