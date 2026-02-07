@@ -23,6 +23,12 @@ var (
 // ValidatePath validates that a path is within allowed directories and safe to access.
 // It returns the resolved absolute path if valid.
 func ValidatePath(path string, allowedDirs []string) (string, error) {
+	return ValidatePathWithResolved(path, allowedDirs, resolveAllowedDirs(allowedDirs))
+}
+
+// ValidatePathWithResolved validates a path using pre-resolved allowed directories.
+// This avoids redundant symlink resolution when the caller has already resolved them.
+func ValidatePathWithResolved(path string, allowedDirs []string, resolvedAllowed []string) (string, error) {
 	if path == "" {
 		return "", ErrEmptyPath
 	}
@@ -70,9 +76,6 @@ func ValidatePath(path string, allowedDirs []string) (string, error) {
 		}
 		// If parent doesn't exist, we'll validate the normalized path as-is
 	}
-
-	// Resolve allowed directories too (handles macOS /var -> /private/var)
-	resolvedAllowed := resolveAllowedDirs(allowedDirs)
 
 	// Check if resolved path is within allowed directories
 	if !IsPathWithinAllowedDirectories(resolvedPath, resolvedAllowed) {
@@ -229,9 +232,73 @@ func IsPathWithinAllowedDirectories(path string, allowedDirs []string) bool {
 	return false
 }
 
+// ValidateNoSymlinksInPath walks each segment of the path starting from the
+// allowed root and verifies that no component is a symlink. Returns nil if all
+// components are regular directories (or don't exist). This prevents symlink
+// TOCTOU attacks during directory creation or file operations.
+func ValidateNoSymlinksInPath(path string, allowedDirs []string) error {
+	normalized, err := pathutil.NormalizePath(path)
+	if err != nil {
+		return err
+	}
+
+	// Find the matching allowed root
+	allowedRoot := ""
+	for _, dir := range allowedDirs {
+		normalizedDir, err := pathutil.NormalizePath(dir)
+		if err != nil {
+			continue
+		}
+		if normalized == normalizedDir || strings.HasPrefix(normalized, normalizedDir+string(filepath.Separator)) {
+			if len(normalizedDir) > len(allowedRoot) {
+				allowedRoot = normalizedDir
+			}
+		}
+	}
+	if allowedRoot == "" {
+		return ErrPathOutsideAllowed
+	}
+
+	relative, err := filepath.Rel(allowedRoot, normalized)
+	if err != nil {
+		return err
+	}
+	if relative == "." {
+		return nil
+	}
+
+	// Walk each path segment checking for symlinks
+	current := allowedRoot
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Path segment doesn't exist yet, stop checking
+				return nil
+			}
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrSymlinkOperationDenied
+		}
+	}
+
+	return nil
+}
+
 // ValidatePathForCreation validates a path for file/directory creation.
 // It checks that the parent directory is within allowed directories.
 func ValidatePathForCreation(path string, allowedDirs []string) (string, error) {
+	return ValidatePathForCreationWithResolved(path, allowedDirs, resolveAllowedDirs(allowedDirs))
+}
+
+// ValidatePathForCreationWithResolved validates a path for creation using pre-resolved allowed directories.
+// This avoids redundant symlink resolution when the caller has already resolved them.
+func ValidatePathForCreationWithResolved(path string, allowedDirs []string, resolvedAllowed []string) (string, error) {
 	if path == "" {
 		return "", ErrEmptyPath
 	}
@@ -244,9 +311,6 @@ func ValidatePathForCreation(path string, allowedDirs []string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-
-	// Resolve allowed directories
-	resolvedAllowed := resolveAllowedDirs(allowedDirs)
 
 	// For new files, we need to validate based on where they would be created
 	// Walk up the path to find the first existing parent

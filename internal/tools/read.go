@@ -13,6 +13,11 @@ import (
 	"github.com/spf13/cast"
 )
 
+// maxConcurrentReads limits the number of concurrent file reads in
+// read_multiple_files to prevent file descriptor exhaustion. The value 10
+// provides a balance between parallelism and resource usage, staying well
+// under typical OS limits (1024+ on most systems) while allowing meaningful
+// concurrency for batch operations.
 const maxConcurrentReads = 10
 
 // NewReadTextFileTool creates the read_text_file tool.

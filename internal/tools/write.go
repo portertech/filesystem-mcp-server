@@ -113,6 +113,11 @@ func safeMkdirAll(path string, perm os.FileMode, allowedDirs []string) error {
 		return err
 	}
 
+	// Validate no symlinks exist in the path before creating directories
+	if err := security.ValidateNoSymlinksInPath(normalized, allowedDirs); err != nil {
+		return err
+	}
+
 	allowedRoot := ""
 	for _, dir := range allowedDirs {
 		normalizedDir, err := pathutil.NormalizePath(dir)
@@ -163,57 +168,6 @@ func safeMkdirAll(path string, perm os.FileMode, allowedDirs []string) error {
 		}
 		if err := os.Mkdir(current, perm); err != nil {
 			return err
-		}
-	}
-
-	return nil
-}
-
-func validateNoSymlinkPath(path string, allowedDirs []string) error {
-	normalized, err := pathutil.NormalizePath(path)
-	if err != nil {
-		return err
-	}
-
-	allowedRoot := ""
-	for _, dir := range allowedDirs {
-		normalizedDir, err := pathutil.NormalizePath(dir)
-		if err != nil {
-			continue
-		}
-		if normalized == normalizedDir || strings.HasPrefix(normalized, normalizedDir+string(filepath.Separator)) {
-			if len(normalizedDir) > len(allowedRoot) {
-				allowedRoot = normalizedDir
-			}
-		}
-	}
-	if allowedRoot == "" {
-		return security.ErrPathOutsideAllowed
-	}
-
-	relative, err := filepath.Rel(allowedRoot, normalized)
-	if err != nil {
-		return err
-	}
-	if relative == "." {
-		return nil
-	}
-
-	current := allowedRoot
-	for _, part := range strings.Split(relative, string(filepath.Separator)) {
-		if part == "" {
-			continue
-		}
-		current = filepath.Join(current, part)
-		info, err := os.Lstat(current)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return security.ErrSymlinkOperationDenied
 		}
 	}
 
