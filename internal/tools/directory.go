@@ -51,6 +51,7 @@ func NewListDirectoryTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"list_directory",
 		mcp.WithDescription("List contents of a directory with [FILE] and [DIR] prefixes."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the directory to list"), mcp.Required()),
 		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
@@ -126,6 +127,7 @@ func NewListDirectoryWithSizesTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"list_directory_with_sizes",
 		mcp.WithDescription("List directory contents with file sizes in human-readable format."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the directory to list"), mcp.Required()),
 		mcp.WithString("sortBy", mcp.Description("Sort by 'name', 'size', or 'modified'")),
 		mcp.WithString("order", mcp.Description("Sort order: 'asc' or 'desc'")),
@@ -287,6 +289,7 @@ func NewDirectoryTreeTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"directory_tree",
 		mcp.WithDescription("Get a recursive tree view of files and directories as JSON."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the root directory"), mcp.Required()),
 		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude")),
 	)

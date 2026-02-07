@@ -18,6 +18,8 @@ func NewWriteFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"write_file",
 		mcp.WithDescription("Write content to a file. Creates parent directories if needed. Uses atomic write."),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file to write"), mcp.Required()),
 		mcp.WithString("content", mcp.Description("Content to write to the file"), mcp.Required()),
 	)

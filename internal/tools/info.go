@@ -18,6 +18,7 @@ func NewGetFileInfoTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"get_file_info",
 		mcp.WithDescription("Get detailed metadata about a file or directory."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file or directory"), mcp.Required()),
 	)
 }
@@ -57,6 +58,7 @@ func NewListAllowedDirectoriesTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"list_allowed_directories",
 		mcp.WithDescription("List all directories that are allowed to be accessed."),
+		mcp.WithReadOnlyHintAnnotation(true),
 	)
 }
 

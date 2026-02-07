@@ -18,6 +18,7 @@ func NewEditFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"edit_file",
 		mcp.WithDescription("Apply find/replace edits to a file. Supports exact matching and whitespace-normalized line matching. Returns a unified diff."),
+		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file to edit"), mcp.Required()),
 		mcp.WithArray("edits", mcp.Description("Array of edit operations with oldText and newText"), mcp.Required()),
 		mcp.WithBoolean("dryRun", mcp.Description("If true, preview changes without writing")),

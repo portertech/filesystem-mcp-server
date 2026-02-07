@@ -73,6 +73,7 @@ Read multiple files concurrently. Failed reads for individual files won't stop t
 **Parameters**:
 
 - `paths` (required): Array of file paths to read
+- `format` (optional): Output format - `text` or `json` (default: text)
 
 **Returns**: Array of file contents with their paths
 
@@ -99,14 +100,16 @@ Create or overwrite a file with new content using atomic writes (temp file + ren
 
 ### `edit_file`
 
-Apply find/replace edits to a text file with git-style diff output.
+Apply find/replace edits to a text file with git-style diff output. Supports exact matching and whitespace-normalized line matching.
 
 **Parameters**:
 
 - `path` (required): Path to the file to edit
 - `edits` (required): Array of edit operations, each with:
-  - `oldText`: Text to search for (must match exactly)
+  - `oldText`: Text to search for (exact or whitespace-normalized match)
   - `newText`: Text to replace with
+  - `requireUnique` (optional): Require exactly one match (default: true)
+  - `occurrence` (optional): Which occurrence to replace when multiple exist (1-indexed)
 - `dryRun` (optional): Preview changes without applying (default: false)
 
 **Returns**: Git-style diff showing changes made
@@ -119,6 +122,7 @@ Copy a file to a new location. Uses streaming for memory-efficient handling of l
 
 - `source` (required): Path to the source file
 - `destination` (required): Path to the destination file
+- `overwrite` (optional): Overwrite existing destination file (default: false)
 
 **Returns**: Success confirmation
 
@@ -171,6 +175,7 @@ List the contents of a directory with `[FILE]` and `[DIR]` prefixes.
 **Parameters**:
 
 - `path` (required): Path to the directory to list
+- `format` (optional): Output format - `text` or `json` (default: text)
 
 **Returns**: Array of directory entries with type indicators
 
@@ -183,6 +188,7 @@ List directory contents with file sizes and optional sorting.
 - `path` (required): Path to the directory to list
 - `sortBy` (optional): Sort field - `name`, `size`, or `modified` (default: name)
 - `order` (optional): Sort order - `asc` or `desc` (default: asc)
+- `format` (optional): Output format - `text` or `json` (default: text)
 
 **Returns**: Array of entries with name, type, size, and modification time
 
@@ -193,6 +199,7 @@ Get a recursive tree view of files and directories as JSON.
 **Parameters**:
 
 - `path` (required): Path to the root directory
+- `excludePatterns` (optional): Array of glob patterns to exclude
 
 **Returns**: JSON structure with `name`, `type`, and `children` for each entry
 
@@ -205,6 +212,7 @@ Recursively search for files matching a glob pattern.
 - `path` (required): Starting directory for the search
 - `pattern` (required): Glob pattern to match (e.g., `*.go`, `**/*.json`)
 - `excludePatterns` (optional): Array of patterns to exclude
+- `format` (optional): Output format - `text` or `json` (default: text)
 
 **Returns**: Array of matching file paths
 
@@ -236,11 +244,7 @@ List all directories the server is allowed to access.
 
 ## Tool Annotations
 
-This server sets [MCP Tool Annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#toolannotations) on each tool so clients can:
-
-- Distinguish **read-only** tools from write-capable tools
-- Understand which write operations are **idempotent** (safe to retry with the same arguments)
-- Highlight operations that may be **destructive** (overwriting or deleting data)
+This server sets [MCP Tool Annotations](https://modelcontextprotocol.io/specification/2025-03-26/server/tools#toolannotations) on each tool to help clients understand tool behavior:
 
 | Tool                        | readOnlyHint | idempotentHint | destructiveHint | Notes                                       |
 |-----------------------------|--------------|----------------|-----------------|---------------------------------------------|
@@ -254,15 +258,15 @@ This server sets [MCP Tool Annotations](https://modelcontextprotocol.io/specific
 | `search_files`              | `true`       | –              | –               | Pure read                                   |
 | `get_file_info`             | `true`       | –              | –               | Pure read                                   |
 | `list_allowed_directories`  | `true`       | –              | –               | Pure read                                   |
-| `create_directory`          | `false`      | `true`         | `false`         | Re-creating the same dir is a no-op         |
-| `write_file`                | `false`      | `true`         | `true`          | Overwrites existing files                   |
-| `edit_file`                 | `false`      | `false`        | `true`          | Re-applying edits can fail or double-apply  |
-| `copy_file`                 | `false`      | `true`         | `true`          | Overwrites destination if exists            |
-| `move_file`                 | `false`      | `false`        | `false`         | Move/rename only; repeat usually errors     |
-| `delete_file`               | `false`      | `true`         | `true`          | Deleting already-deleted file is a no-op    |
-| `delete_directory`          | `false`      | `true`         | `true`          | Deleting already-deleted dir is a no-op     |
+| `create_directory`          | –            | `true`         | –               | Re-creating existing dir is a no-op         |
+| `write_file`                | –            | `true`         | `true`          | Overwrites existing files                   |
+| `edit_file`                 | –            | –              | `true`          | Re-applying edits can fail or double-apply  |
+| `copy_file`                 | –            | –              | `true`          | May overwrite destination                   |
+| `move_file`                 | –            | –              | `true`          | Source is removed                           |
+| `delete_file`               | –            | –              | `true`          | Permanently removes file                    |
+| `delete_directory`          | –            | –              | `true`          | Permanently removes directory               |
 
-> **Note**: `idempotentHint` and `destructiveHint` are meaningful only when `readOnlyHint` is `false`, as defined by the MCP spec.
+> **Note**: `–` indicates the hint is not set (treated as unknown/unspecified by clients).
 
 ## Configuration
 

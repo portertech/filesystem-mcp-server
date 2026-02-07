@@ -21,6 +21,7 @@ func NewReadTextFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"read_text_file",
 		mcp.WithDescription("Read the contents of a text file. Supports head/tail for partial reads."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file to read"), mcp.Required()),
 		mcp.WithNumber("head", mcp.Description("Number of lines to read from the beginning")),
 		mcp.WithNumber("tail", mcp.Description("Number of lines to read from the end")),
@@ -109,6 +110,7 @@ func NewReadFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"read_file",
 		mcp.WithDescription("Read the contents of a file. Deprecated: use read_text_file instead."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file to read"), mcp.Required()),
 	)
 }
@@ -143,6 +145,7 @@ func NewReadMultipleFilesTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"read_multiple_files",
 		mcp.WithDescription("Read multiple files concurrently. Returns content with paths as references."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithArray("paths", mcp.Description("Array of file paths to read"), mcp.Required()),
 		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)

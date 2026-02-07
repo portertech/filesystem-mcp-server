@@ -19,6 +19,7 @@ func NewSearchFilesTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"search_files",
 		mcp.WithDescription("Recursively search for files matching a glob pattern."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Starting directory for the search"), mcp.Required()),
 		mcp.WithString("pattern", mcp.Description("Glob pattern to match file names"), mcp.Required()),
 		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude")),

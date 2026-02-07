@@ -33,6 +33,7 @@ func NewReadMediaFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"read_media_file",
 		mcp.WithDescription("Read a media file (image or audio) and return it as base64-encoded data."),
+		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the media file to read"), mcp.Required()),
 	)
 }
