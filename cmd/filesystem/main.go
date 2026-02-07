@@ -34,7 +34,7 @@ func main() {
 
 	dirs := flag.Args()
 	if len(dirs) == 0 {
-		logger.Info("no directories specified, will use MCP roots if available")
+		logger.Info("no directories specified, filesystem access will be restricted")
 	}
 
 	reg := registry.New(dirs, logger)

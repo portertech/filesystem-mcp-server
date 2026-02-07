@@ -178,8 +178,3 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) GetMCPServer() *server.MCPServer {
 	return s.mcpServer
 }
-
-// GetRegistry returns the registry for roots updates.
-func (s *Server) GetRegistry() *registry.Registry {
-	return s.registry
-}
