@@ -22,7 +22,7 @@ func NewSearchFilesTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Starting directory for the search"), mcp.Required()),
 		mcp.WithString("pattern", mcp.Description("Glob pattern to match file names"), mcp.Required()),
-		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude")),
+		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude"), mcp.Items(map[string]any{"type": "string"})),
 		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }

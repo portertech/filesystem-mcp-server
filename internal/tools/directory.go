@@ -291,7 +291,7 @@ func NewDirectoryTreeTool(reg *registry.Registry) mcp.Tool {
 		mcp.WithDescription("Get a recursive tree view of files and directories as JSON."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the root directory"), mcp.Required()),
-		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude")),
+		mcp.WithArray("excludePatterns", mcp.Description("Glob patterns to exclude"), mcp.Items(map[string]any{"type": "string"})),
 	)
 }
 

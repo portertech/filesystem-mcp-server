@@ -146,7 +146,7 @@ func NewReadMultipleFilesTool(reg *registry.Registry) mcp.Tool {
 		"read_multiple_files",
 		mcp.WithDescription("Read multiple files concurrently. Returns content with paths as references."),
 		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithArray("paths", mcp.Description("Array of file paths to read"), mcp.Required()),
+		mcp.WithArray("paths", mcp.Description("Array of file paths to read"), mcp.Required(), mcp.Items(map[string]any{"type": "string"})),
 		mcp.WithString("format", mcp.Description("Output format: 'text' or 'json'")),
 	)
 }
