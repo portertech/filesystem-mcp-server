@@ -161,17 +161,17 @@ func TestHandleReadTextFileWithLineNumbers(t *testing.T) {
 		{
 			name:     "full file with line numbers",
 			args:     map[string]any{"path": testFile, "line_numbers": true},
-			expected: "   1 | line1\n   2 | line2\n   3 | line3\n   4 | line4\n   5 | line5",
+			expected: "1 | line1\n2 | line2\n3 | line3\n4 | line4\n5 | line5",
 		},
 		{
 			name:     "head with line numbers",
 			args:     map[string]any{"path": testFile, "head": 2, "line_numbers": true},
-			expected: "   1 | line1\n   2 | line2",
+			expected: "1 | line1\n2 | line2",
 		},
 		{
 			name:     "tail with line numbers",
 			args:     map[string]any{"path": testFile, "tail": 2, "line_numbers": true},
-			expected: "   4 | line4\n   5 | line5",
+			expected: "4 | line4\n5 | line5",
 		},
 	}
 
@@ -238,6 +238,85 @@ func TestHandleReadTextFileWithLineNumbersEmptyFile(t *testing.T) {
 
 	if textContent.Text != "" {
 		t.Errorf("expected empty string, got: %q", textContent.Text)
+	}
+}
+
+func TestHandleReadTextFileWithLineRange(t *testing.T) {
+	reg, tmpDir := setupTestRegistry(t)
+
+	testFile := filepath.Join(tmpDir, "test.txt")
+	content := "line1\nline2\nline3\nline4\nline5"
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		args     map[string]any
+		expected string
+		isError  bool
+	}{
+		{
+			name:     "read lines 2-4",
+			args:     map[string]any{"path": testFile, "start_line": 2, "end_line": 4},
+			expected: "2 | line2\n3 | line3\n4 | line4",
+		},
+		{
+			name:     "read from line 3 to end",
+			args:     map[string]any{"path": testFile, "start_line": 3},
+			expected: "3 | line3\n4 | line4\n5 | line5",
+		},
+		{
+			name:     "read from start to line 2",
+			args:     map[string]any{"path": testFile, "end_line": 2},
+			expected: "1 | line1\n2 | line2",
+		},
+		{
+			name:    "head with start_line conflict",
+			args:    map[string]any{"path": testFile, "head": 2, "start_line": 1},
+			isError: true,
+		},
+		{
+			name:    "tail with end_line conflict",
+			args:    map[string]any{"path": testFile, "tail": 2, "end_line": 5},
+			isError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := mcp.CallToolRequest{}
+			request.Params.Arguments = tt.args
+
+			result, err := HandleReadTextFile(context.Background(), reg, request)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.isError {
+				if !result.IsError {
+					t.Error("expected error result")
+				}
+				return
+			}
+
+			if result.IsError {
+				t.Errorf("unexpected error: %v", result.Content)
+				return
+			}
+
+			if len(result.Content) == 0 {
+				t.Fatal("expected content in result")
+			}
+			textContent, ok := result.Content[0].(mcp.TextContent)
+			if !ok {
+				t.Fatal("expected TextContent")
+			}
+
+			if textContent.Text != tt.expected {
+				t.Errorf("expected:\n%q\ngot:\n%q", tt.expected, textContent.Text)
+			}
+		})
 	}
 }
 

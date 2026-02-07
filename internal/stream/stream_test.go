@@ -211,3 +211,145 @@ func TestFormatSize(t *testing.T) {
 		})
 	}
 }
+
+func TestReadFileWithLineNumbers(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+
+	content := "line1\nline2\nline3\nline4\nline5"
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name      string
+		startLine int
+		endLine   int
+		expected  string
+	}{
+		{
+			name:      "full file",
+			startLine: 0,
+			endLine:   0,
+			expected:  "1 | line1\n2 | line2\n3 | line3\n4 | line4\n5 | line5",
+		},
+		{
+			name:      "lines 2-4",
+			startLine: 2,
+			endLine:   4,
+			expected:  "2 | line2\n3 | line3\n4 | line4",
+		},
+		{
+			name:      "from line 3 to end",
+			startLine: 3,
+			endLine:   0,
+			expected:  "3 | line3\n4 | line4\n5 | line5",
+		},
+		{
+			name:      "first 2 lines",
+			startLine: 1,
+			endLine:   2,
+			expected:  "1 | line1\n2 | line2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ReadFileWithLineNumbers(testFile, tt.startLine, tt.endLine)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("ReadFileWithLineNumbers(%d, %d) = %q, want %q", tt.startLine, tt.endLine, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestReadFileWithLineNumbersDynamicWidth(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "large.txt")
+
+	// Create a 100-line file to test 3-digit width
+	var builder strings.Builder
+	for i := 1; i <= 100; i++ {
+		builder.WriteString("line")
+		builder.WriteString(strconv.Itoa(i))
+		builder.WriteString("\n")
+	}
+	if err := os.WriteFile(testFile, []byte(builder.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ReadFileWithLineNumbers(testFile, 98, 100)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// With 100 lines, width should be 3
+	expected := " 98 | line98\n 99 | line99\n100 | line100"
+	if result != expected {
+		t.Errorf("expected:\n%q\ngot:\n%q", expected, result)
+	}
+}
+
+func TestTailFileWithLineNumbers(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test.txt")
+
+	content := "line1\nline2\nline3\nline4\nline5"
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		n        int
+		expected string
+	}{
+		{"last 2 lines", 2, "4 | line4\n5 | line5"},
+		{"last 3 lines", 3, "3 | line3\n4 | line4\n5 | line5"},
+		{"more than available", 10, "1 | line1\n2 | line2\n3 | line3\n4 | line4\n5 | line5"},
+		{"zero lines", 0, ""},
+		{"negative lines", -1, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := TailFileWithLineNumbers(testFile, tt.n)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("TailFileWithLineNumbers(%d) = %q, want %q", tt.n, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLineNumberWidth(t *testing.T) {
+	tests := []struct {
+		maxLine  int
+		expected int
+	}{
+		{0, 1},
+		{1, 1},
+		{9, 1},
+		{10, 2},
+		{99, 2},
+		{100, 3},
+		{999, 3},
+		{1000, 4},
+		{9999, 4},
+		{10000, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.maxLine), func(t *testing.T) {
+			result := lineNumberWidth(tt.maxLine)
+			if result != tt.expected {
+				t.Errorf("lineNumberWidth(%d) = %d, want %d", tt.maxLine, result, tt.expected)
+			}
+		})
+	}
+}

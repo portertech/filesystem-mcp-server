@@ -10,6 +10,7 @@ A Go implementation of a Model Context Protocol (MCP) server providing secure fi
 - **Streaming support**: Memory-efficient handling of large files
 - **Atomic writes**: Uses temp files with rename for safe file operations
 - **Cross-platform**: Works on Linux, macOS, and Windows
+- **AI agent optimized**: Line range support and dynamic formatting for efficient code navigation
 
 ## Installation
 
@@ -52,7 +53,30 @@ Read the contents of a text file with optional partial read and line numbers.
 - `path` (required): Path to the file to read
 - `head` (optional): Number of lines to read from the start
 - `tail` (optional): Number of lines to read from the end
+- `start_line` (optional): Starting line number (1-based, inclusive)
+- `end_line` (optional): Ending line number (1-based, inclusive)
 - `line_numbers` (optional): Include line numbers in output (default: false)
+
+**Notes**:
+- `start_line`/`end_line` cannot be combined with `head`/`tail`
+- Using `start_line`/`end_line` always includes line numbers (optimized for AI agent use)
+- Line number width dynamically adjusts based on total lines
+
+**Examples**:
+
+```json
+// Read specific line range (lines 50-100)
+{"path": "/path/to/file.go", "start_line": 50, "end_line": 100}
+
+// Read from line 200 to end of file
+{"path": "/path/to/file.go", "start_line": 200}
+
+// Read first 20 lines with line numbers
+{"path": "/path/to/file.go", "head": 20, "line_numbers": true}
+
+// Read last 10 lines with line numbers
+{"path": "/path/to/file.go", "tail": 10, "line_numbers": true}
+```
 
 **Returns**: File contents as text, optionally with line numbers prefixed
 
@@ -306,6 +330,54 @@ docker run -v /host/path:/data filesystem-mcp-server /data
 - **Parent traversal prevention**: `..` sequences cannot escape allowed directories
 - **Atomic writes**: File writes use temp files to prevent corruption
 - **Delete protection**: Cannot delete allowed root directories
+
+## Symlink Handling
+
+Symlinks are handled consistently across all tools to balance usability with security. The server supports symlinks when they resolve to paths within allowed directories, while protecting against symlink-based attacks.
+
+### Behavior by Operation Type
+
+| Operation | Symlink Behavior | Rationale |
+|-----------|------------------|----------|
+| **Read** | Follow if target is within allowed directories | Safe - target path is validated before access |
+| **Write/Edit** | Reject symlinks | Prevents TOCTOU (time-of-check-time-of-use) attacks |
+| **Delete** | Reject symlinks | Prevents unintended deletion of symlink targets |
+| **Create directory** | Reject symlinks in path | Prevents creating directories through symlinked paths |
+| **Traversal** (search, tree) | Skip symlinks during recursion | Prevents infinite loops and directory escape |
+
+### Tool-Specific Behavior
+
+| Tool | Root Path | During Traversal |
+|------|-----------|------------------|
+| `read_text_file` | Follows symlinks | N/A |
+| `read_file` | Follows symlinks | N/A |
+| `read_multiple_files` | Follows symlinks | N/A |
+| `read_media_file` | Follows symlinks | N/A |
+| `write_file` | Rejects symlinks | N/A |
+| `edit_file` | Rejects symlinks | N/A |
+| `copy_file` | Source: follows, Destination: rejects | N/A |
+| `move_file` | Source: follows, Destination: rejects | N/A |
+| `delete_file` | Rejects symlinks | N/A |
+| `delete_directory` | Rejects symlinks | Rejects if directory contains symlinks |
+| `create_directory` | Rejects symlinks in path | N/A |
+| `list_directory` | Follows symlinks | Shows symlinks as entries |
+| `list_directory_with_sizes` | Follows symlinks | Shows symlinks as entries |
+| `directory_tree` | Follows symlinks | Skips symlinked entries |
+| `search_files` | Follows symlinks | Skips symlinked files/directories |
+| `get_file_info` | Follows symlinks | N/A |
+
+### Security Considerations
+
+1. **TOCTOU Prevention**: Write operations reject symlinks to prevent race conditions where a symlink could be swapped between validation and the actual write.
+
+2. **Atomic Writes**: File writes use a temp file + rename pattern with `O_EXCL` flag to prevent symlink attacks on the temp file.
+
+3. **Traversal Safety**: During recursive operations, symlinks are skipped to prevent:
+   - Infinite loops from circular symlinks
+   - Escaping allowed directories via symlinks to parent paths
+   - Accessing files outside allowed directories
+
+4. **Allowed Directory Resolution**: Allowed directories themselves are resolved via `filepath.EvalSymlinks` at startup, so symlinked allowed directories work correctly.
 
 ## Development
 

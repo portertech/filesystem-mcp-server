@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,11 +19,13 @@ const maxConcurrentReads = 10
 func NewReadTextFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"read_text_file",
-		mcp.WithDescription("Read the contents of a text file. Supports head/tail for partial reads."),
+		mcp.WithDescription("Read the contents of a text file. Supports head/tail or start_line/end_line for partial reads."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Path to the file to read"), mcp.Required()),
 		mcp.WithNumber("head", mcp.Description("Number of lines to read from the beginning")),
 		mcp.WithNumber("tail", mcp.Description("Number of lines to read from the end")),
+		mcp.WithNumber("start_line", mcp.Description("Starting line number (1-based, inclusive)")),
+		mcp.WithNumber("end_line", mcp.Description("Ending line number (1-based, inclusive)")),
 		mcp.WithBoolean("line_numbers", mcp.Description("Prefix each line with its line number")),
 	)
 }
@@ -34,6 +35,8 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 	path := cast.ToString(request.Params.Arguments["path"])
 	head := cast.ToInt(request.Params.Arguments["head"])
 	tail := cast.ToInt(request.Params.Arguments["tail"])
+	startLine := cast.ToInt(request.Params.Arguments["start_line"])
+	endLine := cast.ToInt(request.Params.Arguments["end_line"])
 	lineNumbers := cast.ToBool(request.Params.Arguments["line_numbers"])
 
 	resolvedPath, err := reg.Validate(path)
@@ -50,23 +53,26 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 		return mcp.NewToolResultError("path is a directory, not a file"), nil
 	}
 
+	// Validate parameter combinations
+	if (head > 0 || tail > 0) && (startLine > 0 || endLine > 0) {
+		return mcp.NewToolResultError("cannot use head/tail with start_line/end_line"), nil
+	}
+
 	var content string
 
-	if lineNumbers {
-		// Use ReadFileWithLineNumbers for line-numbered output
+	// Handle start_line/end_line range (most efficient for AI agents)
+	if startLine > 0 || endLine > 0 {
+		if startLine <= 0 {
+			startLine = 1
+		}
+		content, err = stream.ReadFileWithLineNumbers(resolvedPath, startLine, endLine)
+	} else if lineNumbers {
+		// Use optimized functions for line-numbered output
 		if head > 0 {
 			content, err = stream.ReadFileWithLineNumbers(resolvedPath, 1, head)
 		} else if tail > 0 {
-			// For tail with line numbers, we need to find the starting line
-			totalLines, countErr := countFileLines(resolvedPath)
-			if countErr != nil {
-				return mcp.NewToolResultError(fmt.Errorf("failed to count lines: %w", countErr).Error()), nil
-			}
-			startLine := totalLines - tail + 1
-			if startLine < 1 {
-				startLine = 1
-			}
-			content, err = stream.ReadFileWithLineNumbers(resolvedPath, startLine, 0)
+			// Single-pass tail with line numbers
+			content, err = stream.TailFileWithLineNumbers(resolvedPath, tail)
 		} else {
 			content, err = stream.ReadFileWithLineNumbers(resolvedPath, 0, 0)
 		}
@@ -87,22 +93,6 @@ func HandleReadTextFile(ctx context.Context, reg *registry.Registry, request mcp
 	}
 
 	return mcp.NewToolResultText(content), nil
-}
-
-// countFileLines counts the total number of lines in a file.
-func countFileLines(path string) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
-
-	count := 0
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		count++
-	}
-	return count, scanner.Err()
 }
 
 // NewReadFileTool creates the read_file tool (deprecated alias for read_text_file).

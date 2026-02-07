@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -102,16 +103,16 @@ func TailFile(path string, n int) (string, error) {
 		lines = lines[len(lines)-n:]
 	}
 
-	// Join lines with newlines
-	result := ""
+	// Join lines with newlines using strings.Builder
+	var result strings.Builder
 	for i, line := range lines {
-		result += line
-		if i < len(lines)-1 {
-			result += "\n"
+		if i > 0 {
+			result.WriteByte('\n')
 		}
+		result.WriteString(line)
 	}
 
-	return result, nil
+	return result.String(), nil
 }
 
 // HeadFile reads the first n lines from a file.
@@ -127,25 +128,24 @@ func HeadFile(path string, n int) (string, error) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
-	var lines []string
+	var result strings.Builder
+	first := true
+	count := 0
 
-	for scanner.Scan() && len(lines) < n {
-		lines = append(lines, scanner.Text())
+	for scanner.Scan() && count < n {
+		if !first {
+			result.WriteByte('\n')
+		}
+		first = false
+		result.WriteString(scanner.Text())
+		count++
 	}
 
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
 
-	result := ""
-	for i, line := range lines {
-		result += line
-		if i < len(lines)-1 {
-			result += "\n"
-		}
-	}
-
-	return result, nil
+	return result.String(), nil
 }
 
 // CopyFileStreaming copies a file using streaming with a temporary file for atomicity.
@@ -296,9 +296,34 @@ func ReadFileWithLineNumbers(path string, startLine, endLine int) (string, error
 		startLine = 1
 	}
 
+	// First pass: count total lines to determine width (only if reading to end)
+	// For bounded ranges, use the endLine for width calculation
+	var maxLineNum int
+	if endLine > 0 {
+		maxLineNum = endLine
+	} else {
+		// Count total lines for dynamic width
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			maxLineNum++
+		}
+		if err := scanner.Err(); err != nil {
+			return "", err
+		}
+		// Reset file position for second pass
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+	}
+
+	// Calculate width needed for line numbers
+	width := lineNumberWidth(maxLineNum)
+	format := fmt.Sprintf("%%%dd | %%s", width)
+
 	scanner := bufio.NewScanner(f)
-	var result []string
+	var result strings.Builder
 	lineNum := 0
+	first := true
 
 	for scanner.Scan() {
 		lineNum++
@@ -313,21 +338,88 @@ func ReadFileWithLineNumbers(path string, startLine, endLine int) (string, error
 			break
 		}
 
-		result = append(result, fmt.Sprintf("%4d | %s", lineNum, scanner.Text()))
+		if !first {
+			result.WriteByte('\n')
+		}
+		first = false
+		fmt.Fprintf(&result, format, lineNum, scanner.Text())
 	}
 
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
 
-	// Join lines with newlines
-	output := ""
-	for i, line := range result {
-		output += line
-		if i < len(result)-1 {
-			output += "\n"
-		}
+	return result.String(), nil
+}
+
+// TailFileWithLineNumbers reads the last n lines from a file with line numbers in a single pass.
+func TailFileWithLineNumbers(path string, n int) (string, error) {
+	if n <= 0 {
+		return "", nil
 	}
 
-	return output, nil
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	// Use a ring buffer to keep track of last n lines with their line numbers
+	type lineEntry struct {
+		num  int
+		text string
+	}
+	buffer := make([]lineEntry, n)
+	bufIdx := 0
+	lineCount := 0
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lineCount++
+		buffer[bufIdx] = lineEntry{num: lineCount, text: scanner.Text()}
+		bufIdx = (bufIdx + 1) % n
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	if lineCount == 0 {
+		return "", nil
+	}
+
+	// Calculate width needed for line numbers
+	width := lineNumberWidth(lineCount)
+	format := fmt.Sprintf("%%%dd | %%s", width)
+
+	// Determine how many lines to output
+	outputCount := n
+	if lineCount < n {
+		outputCount = lineCount
+		bufIdx = 0 // Start from beginning if we have fewer lines than requested
+	}
+
+	var result strings.Builder
+	for i := 0; i < outputCount; i++ {
+		if i > 0 {
+			result.WriteByte('\n')
+		}
+		entry := buffer[(bufIdx+i)%n]
+		fmt.Fprintf(&result, format, entry.num, entry.text)
+	}
+
+	return result.String(), nil
+}
+
+// lineNumberWidth calculates the character width needed to display a line number.
+func lineNumberWidth(maxLine int) int {
+	if maxLine <= 0 {
+		return 1
+	}
+	width := 0
+	for maxLine > 0 {
+		width++
+		maxLine /= 10
+	}
+	return width
 }
