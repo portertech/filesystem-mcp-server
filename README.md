@@ -1,6 +1,6 @@
 # Filesystem MCP Server
 
-A Go implementation of a Model Context Protocol (MCP) server providing secure filesystem operations with directory restrictions.
+A secure, high-performance [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that gives AI coding agents like Crush and OpenCode safe access to your local filesystem. Built in Go with directory sandboxing, symlink attack prevention, and atomic writes—so you can confidently let AI agents read, write, and manage files within boundaries you control.
 
 ## Features
 
