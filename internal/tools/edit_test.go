@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -124,6 +125,31 @@ func TestHandleEditFile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGenerateUnifiedDiffPreservesSpecialCharacters(t *testing.T) {
+	oldText := "url := `ws://127.0.0.1:1234`\nlist := []string{\"a|b\", \"c^d\"}\npath := `C:\\\\tmp\\\\file`\n"
+	newText := "url := `ws://127.0.0.1:5678`\nlist := []string{\"a|b\", \"c^d\"}\npath := `C:\\\\tmp\\\\file`\nextra := map[string]string{\"key\": \"value\"}\n"
+	diff := generateUnifiedDiff("test.txt", oldText, newText)
+
+	expected := []string{
+		"`ws://127.0.0.1:5678`",
+		"[]string{\"a|b\", \"c^d\"}",
+		"`C:\\\\tmp\\\\file`",
+		"map[string]string{\"key\": \"value\"}",
+	}
+	for _, snippet := range expected {
+		if !strings.Contains(diff, snippet) {
+			t.Errorf("diff missing %q", snippet)
+		}
+	}
+
+	unexpected := []string{"%60", "%5B", "%5D", "%7B", "%7D", "%7C", "%5C", "%5E", "%3A", "%2F"}
+	for _, snippet := range unexpected {
+		if strings.Contains(diff, snippet) {
+			t.Errorf("diff contains encoded sequence %q", snippet)
+		}
 	}
 }
 

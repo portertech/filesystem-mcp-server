@@ -6,11 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/portertech/filesystem-mcp-server/internal/registry"
 	"github.com/portertech/filesystem-mcp-server/internal/security"
 	"github.com/portertech/filesystem-mcp-server/pkg/filesystem"
-	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cast"
 )
 
@@ -255,21 +257,11 @@ func getIndent(s string) string {
 
 // generateUnifiedDiff generates a unified diff between two texts.
 func generateUnifiedDiff(path, oldText, newText string) string {
-	dmp := diffmatchpatch.New()
-	diffs := dmp.DiffMain(oldText, newText, false)
-	patches := dmp.PatchMake(oldText, diffs)
-
-	if len(patches) == 0 {
+	edits := myers.ComputeEdits(span.URIFromPath(path), oldText, newText)
+	if len(edits) == 0 {
 		return "No changes"
 	}
 
-	var result strings.Builder
-	result.WriteString(fmt.Sprintf("--- a/%s\n", path))
-	result.WriteString(fmt.Sprintf("+++ b/%s\n", path))
-
-	for _, patch := range patches {
-		result.WriteString(patch.String())
-	}
-
-	return result.String()
+	unified := gotextdiff.ToUnified("a/"+path, "b/"+path, oldText, edits)
+	return fmt.Sprintf("%v", unified)
 }
