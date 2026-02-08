@@ -14,11 +14,23 @@ A secure, high-performance [Model Context Protocol](https://modelcontextprotocol
 
 ## Installation
 
+### Docker (Recommended)
+
+The easiest way to run the server is with Docker:
+
+```bash
+docker pull portertech/filesystem-mcp-server
+```
+
+See the [Docker Usage](#docker-usage) section for configuration examples.
+
+### Go Install
+
 ```bash
 go install github.com/portertech/filesystem-mcp-server/cmd/filesystem@latest
 ```
 
-Or build from source:
+### Build from Source
 
 ```bash
 git clone https://github.com/portertech/filesystem-mcp-server.git
@@ -30,16 +42,16 @@ make build
 
 ```bash
 # Start server with allowed directories
-./filesystem /path/to/allowed/dir1 /path/to/allowed/dir2
+filesystem /path/to/allowed/dir1 /path/to/allowed/dir2
 
 # Enable verbose logging
-./filesystem -verbose /path/to/dir
+filesystem -verbose /path/to/dir
 
 # Show version
-./filesystem -version
+filesystem -version
 
 # List allowed directories
-./filesystem -list /path/to/dir
+filesystem -list /path/to/dir
 ```
 
 ## Available Tools
@@ -298,6 +310,27 @@ This server sets [MCP Tool Annotations](https://modelcontextprotocol.io/specific
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
+#### Using Docker (Recommended)
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/Users/username/Documents:/Users/username/Documents",
+        "-v", "/Users/username/Projects:/Users/username/Projects",
+        "portertech/filesystem-mcp-server",
+        "/Users/username/Documents", "/Users/username/Projects"
+      ]
+    }
+  }
+}
+```
+
+#### Using Binary
+
 ```json
 {
   "mcpServers": {
@@ -312,14 +345,24 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-## Docker
+## Docker Usage
+
+Running the server in Docker provides an additional layer of security through container isolation, limiting the agent's access to only the mounted directories. Mirror host paths in your volume mounts (e.g., `-v /path:/path` instead of `-v /path:/data`) so the AI agent sees the same paths you reference in conversation.
 
 ```bash
-# Build
-docker build -t filesystem-mcp-server .
-
 # Run with mounted directories
-docker run -v /host/path:/data filesystem-mcp-server /data
+docker run -i \
+  -v /path/to/dir:/path/to/dir \
+  portertech/filesystem-mcp-server /path/to/dir
+
+# Multiple directories
+docker run -i \
+  -v /home/user/projects:/home/user/projects \
+  -v /home/user/documents:/home/user/documents \
+  portertech/filesystem-mcp-server /home/user/projects /home/user/documents
+
+# Build locally (optional)
+docker build -t filesystem-mcp-server .
 ```
 
 ## Security
