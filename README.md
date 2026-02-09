@@ -14,6 +14,8 @@ A secure, high-performance [Model Context Protocol](https://modelcontextprotocol
 
 ## Installation
 
+Pre-built binaries are available on the [GitHub Releases](https://github.com/portertech/filesystem-mcp-server/releases) page.
+
 ### Docker (Recommended)
 
 The easiest way to run the server is with Docker:
