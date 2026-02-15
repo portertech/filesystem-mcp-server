@@ -20,7 +20,7 @@ import (
 func NewEditFileTool(reg *registry.Registry) mcp.Tool {
 	return mcp.NewTool(
 		"edit_file",
-		mcp.WithDescription("Apply find/replace edits to a file. Requires 'path' parameter specifying the target file. Supports exact matching and whitespace-normalized line matching. Returns a unified diff. Example: {\"path\": \"/path/to/file.txt\", \"edits\": [{\"oldText\": \"foo\", \"newText\": \"bar\"}]}"),
+		mcp.WithDescription("Apply find/replace edits to a file. Supports exact matching and whitespace-normalized line matching. Returns a unified diff."),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithString("path", mcp.Description("Required. Absolute or relative path to the file to edit."), mcp.Required()),
 		mcp.WithArray("edits", mcp.Description("Array of edit operations with oldText and newText"), mcp.Required(), mcp.Items(map[string]any{"type": "object"})),
@@ -32,7 +32,7 @@ func NewEditFileTool(reg *registry.Registry) mcp.Tool {
 func HandleEditFile(ctx context.Context, reg *registry.Registry, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	path := cast.ToString(request.Params.Arguments["path"])
 	if path == "" {
-		return mcp.NewToolResultError("path parameter is required: specify the file to edit (e.g., {\"path\": \"/path/to/file.txt\", \"edits\": [...]})"), nil
+		return mcp.NewToolResultError("path parameter is required"), nil
 	}
 	dryRun := cast.ToBool(request.Params.Arguments["dryRun"])
 
